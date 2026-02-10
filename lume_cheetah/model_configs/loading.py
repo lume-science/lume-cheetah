@@ -1,0 +1,243 @@
+import os
+import sys
+import yaml
+import importlib
+from typing import Union, get_origin, get_args, Type
+
+from lume.variables import ScalarVariable, Variable
+
+
+def try_import_module(name: str):
+    """Tries to import module if required.
+
+    Args:
+        name: Module name.
+
+    Returns:
+        Imported module if successful, None otherwise.
+    """
+    if name not in sys.modules:
+        try:
+            module = importlib.import_module(name)
+        except ImportError:
+            module = None
+    else:
+        module = sys.modules[name]
+    return module
+
+
+def verify_unique_variable_names(variables: list[ScalarVariable]):
+    """Verifies that variable names are unique.
+
+    Raises a ValueError if any reoccurring variable names are found.
+
+    Args:
+        variables: List of scalar variables.
+    """
+    names = [var.name for var in variables]
+    non_unique_names = [name for name in set(names) if names.count(name) > 1]
+    if non_unique_names:
+        raise ValueError(f"Variable names {non_unique_names} are not unique.")
+
+
+def serialize_variables(v: dict):
+    """Performs custom serialization for in- and output variables.
+
+    Args:
+        v: Object to serialize.
+
+    Returns:
+        Dictionary with serialized in- and output variables.
+    """
+    for key, value in v.items():
+        if key in ["input_variables", "output_variables"] and isinstance(value, list):
+            v[key] = {
+                var_dict["name"]: {
+                    var_k: var_v
+                    for var_k, var_v in var_dict.items()
+                    if not (var_k == "name" or var_v is None)
+                }
+                for var_dict in value
+            }
+    return v
+
+
+def deserialize_variables(v):
+    """Performs custom deserialization for in- and output variables.
+
+    Args:
+        v: Object to deserialize.
+
+    Returns:
+        Dictionary with deserialized in- and output variables.
+    """
+    for key, value in v.items():
+        if key in ["input_variables", "output_variables"] and isinstance(value, dict):
+            v[key] = [
+                var_dict | {"name": var_name} for var_name, var_dict in value.items()
+            ]
+    return v
+
+
+def variables_as_yaml(
+    input_variables: list[ScalarVariable],
+    output_variables: list[ScalarVariable],
+    file: Union[str, os.PathLike] = None,
+) -> str:
+    """Returns and optionally saves YAML formatted string defining the in- and output variables.
+
+    Args:
+        input_variables: List of input variables.
+        output_variables: List of output variables.
+        file: If not None, YAML formatted string is saved to given file path.
+
+    Returns:
+        YAML formatted string defining the in- and output variables.
+    """
+    for variables in [input_variables, output_variables]:
+        verify_unique_variable_names(variables)
+    v = {
+        "input_variables": [var.model_dump() for var in input_variables],
+        "output_variables": [var.model_dump() for var in output_variables],
+    }
+    s = yaml.safe_dump(serialize_variables(v), default_flow_style=None, sort_keys=False)
+    if file is not None:
+        with open(file, "w") as f:
+            f.write(s)
+    return s
+
+
+def variables_from_dict(
+    config: dict,
+) -> tuple[list[ScalarVariable], list[ScalarVariable]]:
+    """Parses given config and returns in- and output variable lists.
+
+    Args:
+        config: Variable configuration.
+
+    Returns:
+        In- and output variable lists.
+    """
+    input_variables, output_variables = [], []
+    for key, value in {**config}.items():
+        if key in ["input_variables", "output_variables"]:
+            for var in value:
+                variable_class = get_variable(var["variable_class"])
+                if key == "input_variables":
+                    input_variables.append(variable_class(**var))
+                elif key == "output_variables":
+                    output_variables.append(variable_class(**var))
+    for variables in [input_variables, output_variables]:
+        verify_unique_variable_names(variables)
+    input_variables_dict = {var.name: var for var in input_variables}
+    output_variables_dict = {var.name: var for var in output_variables}
+
+    return input_variables_dict, output_variables_dict
+
+
+def variables_from_yaml(
+    yaml_obj: Union[str, os.PathLike],
+) -> tuple[dict[str, ScalarVariable], dict[str, ScalarVariable]]:
+    """Parses YAML object and returns in- and output variable dictionaries.
+
+    Args:
+        yaml_obj: YAML formatted string or file path.
+
+    Returns:
+        In- and output variable dictionaries.
+    """
+    if os.path.exists(yaml_obj):
+        with open(yaml_obj) as f:
+            yaml_str = f.read()
+    else:
+        yaml_str = yaml_obj
+    config = deserialize_variables(yaml.safe_load(yaml_str))
+    return variables_from_dict(config)
+
+
+def get_valid_path(
+    path: Union[str, os.PathLike],
+    directory: Union[str, os.PathLike] = "",
+) -> Union[str, os.PathLike]:
+    """Validates path exists either as relative or absolute path and returns the first valid option.
+
+    Args:
+        path: Path to validate.
+        directory: Directory against which relative paths are checked.
+
+    Returns:
+        The first valid path option as an absolute path.
+    """
+    relative_path = os.path.join(directory, path)
+    if os.path.exists(relative_path):
+        return os.path.abspath(relative_path)
+    elif os.path.exists(path):
+        return os.path.abspath(path)
+    else:
+        raise OSError(f"File {path} is not found.")
+
+
+def replace_relative_paths(
+    d: dict,
+    model_fields: dict = None,
+    directory: Union[str, os.PathLike] = "",
+) -> dict:
+    """Replaces dictionary entries with absolute paths where the model field annotation is not string or path-like.
+
+    Args:
+        d: Dictionary to process.
+        model_fields: Model fields dictionary used to check expected type.
+        directory: Directory against which relative paths are checked.
+
+    Returns:
+        Dictionary with replaced paths.
+    """
+    if model_fields is None:
+        model_fields = {}
+    for k, v in d.items():
+        if isinstance(v, (str, os.PathLike)):
+            if k in model_fields.keys():
+                field_types = [model_fields[k].annotation]
+                if get_origin(model_fields[k].annotation) is Union:
+                    field_types = list(get_args(model_fields[k].annotation))
+                if all([t not in field_types for t in [str, os.PathLike]]):
+                    d[k] = get_valid_path(v, directory)
+        elif isinstance(v, list):
+            if k in model_fields.keys():
+                field_types = []
+                for i, field_type in enumerate(get_args(model_fields[k].annotation)):
+                    if get_origin(field_type) is Union:
+                        field_types.extend(list(get_args(field_type)))
+                    else:
+                        field_types.append(field_type)
+                for i, ele in enumerate(v):
+                    if isinstance(ele, (str, os.PathLike)) and all(
+                        [t not in field_types for t in [str, os.PathLike]]
+                    ):
+                        v[i] = get_valid_path(ele, directory)
+        elif isinstance(v, dict):
+            model_subfields = {
+                ".".join(key.split(".")[1:]): value
+                for key, value in model_fields.items()
+                if key.startswith(f"{k}.")
+            }
+            d[k] = replace_relative_paths(v, model_subfields, directory)
+    return d
+
+
+def get_variable(name: str) -> Type[Variable]:
+    """Returns the Variable subclass with the given name.
+
+    Args:
+        name: Name of the Variable subclass.
+
+    Returns:
+        Variable subclass with the given name.
+    """
+    classes = [ScalarVariable, Variable]
+    class_lookup = {c.__name__: c for c in classes}
+    if name not in class_lookup.keys():
+        raise KeyError(
+            f"No variable named {name}, valid names are {list(class_lookup.keys())}"
+        )
+    return class_lookup[name]

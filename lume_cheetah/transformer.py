@@ -21,14 +21,14 @@ class CheetahTransformer(ABC):
     """
 
     def __init__(self, control_name_to_cheetah: dict[str, str]):
-        self.control_name_to_cheetah = control_name_to_cheetah
+        self._control_name_to_cheetah = control_name_to_cheetah
 
     @property
     def control_name_to_cheetah(self):
         return self._control_name_to_cheetah
 
     @abstractmethod
-    def get_cheetah_property(self, simulator, control_name):
+    def get_cheetah_property(self, simulator, control_name, energy):
         """
         Given a control variable name, return the corresponding cheetah value.
 
@@ -45,7 +45,7 @@ class CheetahTransformer(ABC):
         pass
 
     @abstractmethod
-    def set_cheetah_property(self, simulator, control_name, value):
+    def set_cheetah_property(self, simulator, control_name, value, energy):
         """
         Given a control name and value, set the corresponding cheetah property.
 

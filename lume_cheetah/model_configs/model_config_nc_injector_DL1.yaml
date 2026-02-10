@@ -1,0 +1,172 @@
+device: cpu
+input_transformer: ' '
+input_variables:
+  QUAD:IN20:425:BACT:
+    default_value: -0.19072549045085907
+    is_constant: false
+    value_range:
+    - -0.22887058854103087
+    - -0.15258039236068727
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  QUAD:IN20:425:BCTRL:
+    default_value: -0.19072549045085907
+    is_constant: false
+    value_range:
+    - -0.22887058854103087
+    - -0.15258039236068727
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  QUAD:IN20:441:BACT:
+    default_value: 0.5443543195724487
+    is_constant: false
+    value_range:
+    - 0.435483455657959
+    - 0.6532251834869385
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  QUAD:IN20:441:BCTRL:
+    default_value: 0.5443543195724487
+    is_constant: false
+    value_range:
+    - 0.435483455657959
+    - 0.6532251834869385
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  QUAD:IN20:511:BACT:
+    default_value: 8.042945861816406
+    is_constant: false
+    value_range:
+    - 6.434356689453125
+    - 9.651535034179688
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  QUAD:IN20:511:BCTRL:
+    default_value: 8.042945861816406
+    is_constant: false
+    value_range:
+    - 6.434356689453125
+    - 9.651535034179688
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  QUAD:IN20:525:BACT:
+    default_value: -4.720837593078613
+    is_constant: false
+    value_range:
+    - -5.665005111694336
+    - -3.7766700744628907
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  QUAD:IN20:525:BCTRL:
+    default_value: -4.720837593078613
+    is_constant: false
+    value_range:
+    - -5.665005111694336
+    - -3.7766700744628907
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  XCOR:IN20:521:BACT:
+    default_value: 0.0
+    is_constant: false
+    value_range:
+    - 0.0
+    - 0.0
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  XCOR:IN20:521:BCTRL:
+    default_value: 0.0
+    is_constant: false
+    value_range:
+    - 0.0
+    - 0.0
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  YCOR:IN20:522:BACT:
+    default_value: 0.0
+    is_constant: false
+    value_range:
+    - 0.0
+    - 0.0
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  YCOR:IN20:522:BCTRL:
+    default_value: 0.0
+    is_constant: false
+    value_range:
+    - 0.0
+    - 0.0
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+output_variables:
+  BPMS:IN20:425:TMIT:
+    default_value: 1.0
+    is_constant: false
+    value_range:
+    - 0.8
+    - 1.2
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:425:X:
+    default_value: 2.1318594112251787e-10
+    is_constant: false
+    value_range:
+    - 1.705487528980143e-10
+    - 2.5582312934702144e-10
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:425:Y:
+    default_value: -1.0172526015983507e-10
+    is_constant: false
+    value_range:
+    - -1.220703121918021e-10
+    - -8.138020812786806e-11
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:511:TMIT:
+    default_value: 1.0
+    is_constant: false
+    value_range:
+    - 0.8
+    - 1.2
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:511:X:
+    default_value: 6.502320459844668e-09
+    is_constant: false
+    value_range:
+    - 5.201856367875734e-09
+    - 7.802784551813602e-09
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:511:Y:
+    default_value: 5.00678998260895e-10
+    is_constant: false
+    value_range:
+    - 4.00543198608716e-10
+    - 6.00814797913074e-10
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:525:TMIT:
+    default_value: 1.0
+    is_constant: false
+    value_range:
+    - 0.8
+    - 1.2
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:525:X:
+    default_value: 4.115054963449438e-09
+    is_constant: false
+    value_range:
+    - 3.2920439707595506e-09
+    - 4.938065956139326e-09
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable
+  BPMS:IN20:525:Y:
+    default_value: 7.700919901765246e-10
+    is_constant: false
+    value_range:
+    - 6.160735921412197e-10
+    - 9.241103882118296e-10
+    value_range_tolerance: 0.1
+    variable_class: ScalarVariable

@@ -1,5 +1,5 @@
 from lume.model import LUMEModel
-from lume.variable import Variable
+from lume.variables import Variable
 from lume_cheetah.simulator import CheetahSimulator
 from lume_cheetah.transformer import CheetahTransformer
 
@@ -19,10 +19,10 @@ class LUMECheetahModel(LUMEModel):
 
     def __init__(
         self,
-        simulator: CheetahSimulator,
-        transformer: CheetahTransformer,
-        control_variables: dict[str, Variable],
-        observable_variables: dict[str, Variable],
+        simulator: CheetahSimulator, #simulates the physics
+        transformer: CheetahTransformer, #maps between model variables and cheetah properties
+        control_variables: dict[str, Variable], #inputs
+        observable_variables: dict[str, Variable], #outputs/ observables
     ):
         """
         Initialize the LUMECheetahModel.
@@ -47,7 +47,8 @@ class LUMECheetahModel(LUMEModel):
         self._variables = {**control_variables, **observable_variables}
         self._state = {}
 
-        self._variables = self.simulator.get_supported_variables()
+        self._variables = self.get_supported_variables()
+
 
     def _set(self, values: dict):
         """
@@ -65,7 +66,7 @@ class LUMECheetahModel(LUMEModel):
         """
         # set the values in the simulator
         for control_name, value in values.items():
-            self.transformer.set_cheetah_property(self.simulator, control_name, value)
+            self.transformer.set_cheetah_property(self.simulator, control_name, value, energy=None)
 
         # track the simulator to update the state
         self.simulator.track()
@@ -133,5 +134,26 @@ class LUMECheetahModel(LUMEModel):
         # get the current state from the simulator
         for name in self.supported_variables.keys():
             self._state[name] = self.transformer.get_cheetah_property(
-                self.simulator, name
+                self.simulator, name, energy= None
             )
+
+    def reset(self):
+        """
+        Reset the model to its initial state by resetting the simulator and updating the state.
+        """
+        self.simulator.reset()
+        self.update_state()
+
+    def get_supported_variables(self):
+        """
+        Get a dictionary of all supported variables in the model.
+
+        Returns
+        -------
+        dict[str, Variable]
+            Dictionary mapping variable names to Variable instances
+        """
+
+        ### perform check if they are in lattice?
+        return {**self.control_variables, **self.observable_variables}
+    

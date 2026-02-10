@@ -56,6 +56,7 @@ class CheetahSimulator:
         self.segment = segment
         self._initial_segment = deepcopy(segment)
         self.initial_beam_distribution = initial_beam_distribution.clone()
+        self.beam_distribution = self.initial_beam_distribution.clone()
         self.initial_beam_distribution_charge = (
             initial_beam_distribution.particle_charges
         )
@@ -64,10 +65,10 @@ class CheetahSimulator:
 
     def reset(self):
         self.segment = deepcopy(self._initial_segment)
-        self.initial_beam_distribution = self.initial_beam_distribution.clone()
+        self.beam_distribution = self.initial_beam_distribution.clone()
 
     def track(self):
-        self.segment.track(self.initial_beam_distribution)
+        self.segment.track(self.beam_distribution)
 
     def get_energy(self):
         """
@@ -77,7 +78,7 @@ class CheetahSimulator:
         Note: need to track on a copy of the segment to not influence readings!
         """
         test_beam = ParticleBeam(
-            torch.zeros(1, 7), energy=self.initial_beam_distribution.energy
+            torch.zeros(1, 7), energy=self.beam_distribution.energy
         )
         test_segment = deepcopy(self.segment)
         element_names = [e.name for e in test_segment.elements]
@@ -94,8 +95,8 @@ class CheetahSimulator:
         If `value` is True, the shutter is closed (no beam), otherwise it is open (beam present).
         """
         if value:
-            self.initial_beam_distribution.particle_charges = torch.tensor(0.0)
+            self.beam_distribution.particle_charges = torch.tensor(0.0)
         else:
-            self.initial_beam_distribution.particle_charges = (
+            self.beam_distribution.particle_charges = (
                 self.initial_beam_distribution_charge.clone()
             )
