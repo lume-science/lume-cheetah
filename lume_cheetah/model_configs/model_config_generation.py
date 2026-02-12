@@ -16,6 +16,7 @@ class InputVariable:
     value_range: list[float]
     value_range_tolerance: float
     variable_class: str
+    unit: str | None = None
 
 @dataclass
 class OutputVariable:
@@ -25,7 +26,8 @@ class OutputVariable:
     value_range: list[float]
     value_range_tolerance: float
     variable_class: str
-
+    unit: str | None = None
+    
 def setup_value_range(value, pv):
     if value[pv] >0 :
         return [value[pv]-value[pv]*0.2, value[pv]+value[pv]*0.2]
@@ -64,6 +66,7 @@ with open('simulation_server/yaml_configs/DL1.yaml', 'r') as file:
 input_variables = {}
 input_subsystems = {'magnets': config['magnets'], 'tcavs': config['tcavs']}
 output_subsystems = {'screens': config['screens'], 'bpms': config['bpms']}
+units = {'magnets': {'QUAD': 'kG', 'XCOR': 'kG/m', 'YCOR': 'kG/m'} }
 for subsystem in input_subsystems:
     
     print(f"Subsystem: {subsystem}")
@@ -81,6 +84,7 @@ for subsystem in input_subsystems:
                     value_range=setup_value_range(value, pv),
                     value_range_tolerance=.1,
                     variable_class= 'ScalarVariable',
+                    unit = units.get(device, None).get(pv.split(':')[0], None)
                     )
                 input_variables.update({pv: asdict(var)})
             except Exception as e:
