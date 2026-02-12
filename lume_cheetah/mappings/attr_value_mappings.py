@@ -119,9 +119,9 @@ SCREEN_MAPPING = {
     "Image:ArraySize1_RBV": FieldAccessor(lambda e, energy: e.resolution[0]),
     "Image:ArraySize0_RBV": FieldAccessor(lambda e, energy: e.resolution[1]),
     "RESOLUTION": FieldAccessor(lambda e, energy: e.pixel_size[0] * 1e6),
-    "IMAGE":  FieldAccessor(lambda e, energy: e.reading.T * 65535),
+    "IMAGE": FieldAccessor(lambda e, energy: e.reading.T * 65535),
     "N_OF_ROW": FieldAccessor(lambda e, energy: e.resolution[0]),
-    "N_OF_COL": FieldAccessor(lambda e, energy: e.resolution[1])
+    "N_OF_COL": FieldAccessor(lambda e, energy: e.resolution[1]),
 }
 
 
@@ -186,19 +186,3 @@ def access_cheetah_attribute(element, pv_attribute, energy, set_value=None):
             raise ValueError(
                 f"Cannot set value for {pv_attribute} of element type {element_type}"
             ) from e
-
-
-def get_mapping(fname):
-    """
-    Create a mapping from control system names to element names from a CSV file.
-
-    Args:
-        fname (str): Path to the CSV file containing the mapping.
-
-    """
-    mapping = (
-        pd.read_csv(fname, dtype=str)
-        .set_index("Control System Name")["Element"]
-        .T.to_dict()
-    )
-    return mapping
