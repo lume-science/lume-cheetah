@@ -1,3 +1,4 @@
+from calendar import c
 from lume.model import LUMEModel
 from lume.variables import Variable
 from lume_cheetah.simulator import CheetahSimulator
@@ -19,10 +20,10 @@ class LUMECheetahModel(LUMEModel):
 
     def __init__(
         self,
-        simulator: CheetahSimulator, #simulates the physics
-        transformer: CheetahTransformer, #maps between model variables and cheetah properties
-        control_variables: dict[str, Variable], #inputs
-        observable_variables: dict[str, Variable], #outputs/ observables
+        simulator: CheetahSimulator,
+        transformer: CheetahTransformer,
+        control_variables: dict[str, Variable],
+        observable_variables: dict[str, Variable],
     ):
         """
         Initialize the LUMECheetahModel.
@@ -47,7 +48,11 @@ class LUMECheetahModel(LUMEModel):
         self._variables = {**control_variables, **observable_variables}
         self._state = {}
 
-        self._variables = self.get_supported_variables()
+
+
+        # init state
+        self.update_state()
+        
 
 
     def _set(self, values: dict):
@@ -66,7 +71,7 @@ class LUMECheetahModel(LUMEModel):
         """
         # set the values in the simulator
         for control_name, value in values.items():
-            self.transformer.set_cheetah_property(self.simulator, control_name, value, energy=None)
+            self.transformer.set_cheetah_property(self.simulator, control_name, value)
 
         # track the simulator to update the state
         self.simulator.track()
@@ -88,7 +93,6 @@ class LUMECheetahModel(LUMEModel):
         dict[str, Any]
             Dictionary mapping variable names to their current values
         """
-        # return the requested variables from the state
         return {var: self._state[var] for var in variable_names}
 
     @property
@@ -101,8 +105,7 @@ class LUMECheetahModel(LUMEModel):
         dict[str, Variable]
             Dictionary mapping variable names to Variable instances
         """
-        return self._variables
-
+        return self._variables 
     @property
     def control_variables(self) -> dict[str, Variable]:
         """
@@ -134,7 +137,7 @@ class LUMECheetahModel(LUMEModel):
         # get the current state from the simulator
         for name in self.supported_variables.keys():
             self._state[name] = self.transformer.get_cheetah_property(
-                self.simulator, name, energy= None
+                self.simulator, name
             )
 
     def reset(self):
@@ -144,16 +147,4 @@ class LUMECheetahModel(LUMEModel):
         self.simulator.reset()
         self.update_state()
 
-    def get_supported_variables(self):
-        """
-        Get a dictionary of all supported variables in the model.
-
-        Returns
-        -------
-        dict[str, Variable]
-            Dictionary mapping variable names to Variable instances
-        """
-
-        ### perform check if they are in lattice?
-        return {**self.control_variables, **self.observable_variables}
     
