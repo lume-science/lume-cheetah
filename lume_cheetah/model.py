@@ -49,6 +49,8 @@ class LUMECheetahModel(LUMEModel):
         self._state = {}
 
 
+        #TODO: in _set check if pvs affect beam energy and recalc if necessary. note for self: only cavities 
+        #
 
         # init state
         self.update_state()
