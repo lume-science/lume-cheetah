@@ -84,7 +84,7 @@ class SLACCheetahTransformer(CheetahTransformer):
         """
         #get the last part after the last colon, which is the attribute name
         control_name, attribute = control_variable_name.rsplit(":", 1)
-        element_name = self.control_name_to_cheetah.get(control_name) # mapping { "QUAD:IN20:511:BCTRL" : "QE03"}
+        element_name = self.control_name_to_cheetah.get(control_variable_name) # mapping { "QUAD:IN20:511:BCTRL" : "QE03"}
         if element_name is None:
             raise ValueError(f"No mapping found for control variable '{control_variable_name}'")
 
@@ -112,7 +112,7 @@ class SLACCheetahTransformer(CheetahTransformer):
         """
 
         control_name, attribute = control_variable_name.rsplit(":", 1) 
-        element_name = self.control_name_to_cheetah.get(control_name)
+        element_name = self.control_name_to_cheetah.get(control_variable_name)
         if element_name is None:
             raise ValueError(f"No mapping found for control variable '{control_variable_name}'")
 
