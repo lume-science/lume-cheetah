@@ -55,8 +55,82 @@ def deep_merge(a: dict, b: dict ) -> dict:
             a[k] = v
     return a
 
-def load_relevant_controls(yaml_files: list[str]):
+def load_relevant_controls(yaml_files: list[str]) -> dict[str, tuple[str, dict[str, str]]]:
+    """
+    Load and consolidate control-system PV definitions from one or more YAML files.
 
+    This function reads multiple YAML configuration files, merges them into a single
+    hierarchical configuration using ``deep_merge``, and extracts a flattened mapping
+    of relevant control devices.
+
+    Each device entry contains:
+      - The device type (from metadata)
+      - A dictionary of associated PVs (Process Variables)
+
+    During processing:
+      - YAML files are merged in the order provided (later files override earlier ones).
+      - PV keys are converted to uppercase.
+      - Device names (MAD names) are converted to lowercase.
+      - Only the ``controls_information['PVs']`` and ``metadata['type']`` fields
+        are extracted for each device.
+
+    Parameters
+    ----------
+    yaml_files : list[str]
+        List of paths to YAML configuration files. Files are merged in order,
+        with later files taking precedence in case of overlapping keys.
+
+    Returns
+    -------
+    dict[str, tuple[str, dict[str, str]]]
+        Dictionary mapping device names (lowercase MAD names) to tuples:
+
+            {
+                "<madname>": (
+                    "<device_type>",
+                    {
+                        "PVKEY": "PV:NAME:STRING",
+                        ...
+                    }
+                ),
+                ...
+            }
+
+        Where:
+        - ``<device_type>`` is taken from ``metadata['type']``
+        - ``PVKEY`` entries are uppercased
+
+    Raises
+    ------
+    KeyError
+        If expected YAML fields are missing, such as:
+        - ``controls_information``
+        - ``PVs``
+        - ``metadata``
+        - ``type``
+
+    Notes
+    -----
+    - YAML file structure is assumed to follow:
+
+        subsystem:
+            madname:
+                metadata:
+                    type: <device_type>
+                controls_information:
+                    PVs:
+                        <pv_key>: <pv_name>
+
+    - No schema validation is performed.
+    - PV dictionaries are shallow-copied before transformation.
+    - The function does not validate that PV strings are unique.
+
+    Examples
+    --------
+    >>> controls = load_relevant_controls(["quad.yaml", "bpm.yaml"])
+    >>> controls["quad:in20:731"]
+    ('QUAD', {'BCTRL': 'QUAD:IN20:731:BCTRL', 'BACT': 'QUAD:IN20:731:BACT'})
+    """
     data = {}
     for yaml_file in yaml_files:
         contents = load_yaml(yaml_file)
