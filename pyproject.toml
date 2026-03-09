@@ -56,9 +56,6 @@ namespaces = false
 [tool.setuptools.package-data]
 virtual_accelerator = ["py.typed"]
 
-[tool.setuptools_scm]
-version_file = "lume_bmad/_version.py"
-
 [tool.ruff]
 # select = []
 # ignore = []
