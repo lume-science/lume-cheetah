@@ -2,7 +2,8 @@ import torch
 from copy import deepcopy
 from cheetah.accelerator import Segment
 from cheetah.particles import Beam, ParticleBeam
-
+from beamphysics import ParticleGroup
+from lume_cheetah.utils import particlegroup_to_cheetah_beam
 
 class CheetahSimulator:
     """
@@ -10,8 +11,8 @@ class CheetahSimulator:
 
     This class provides an interface to simulate the behavior
     of a particle beam as it travels through a Cheetah accelerator segment.
-    It allows for tracking the beam, retrieving energy profiles,
-    and controlling the beam shutter state.
+    It allows for tracking the beam, retrieving energy profiles, and
+    controlling the beam shutter state.
 
     Attributes
     ----------
@@ -19,6 +20,9 @@ class CheetahSimulator:
         The Cheetah Segment representing the accelerator configuration.
     initial_beam_distribution : Beam
         The initial beam distribution to be tracked through the segment.
+    initial_beam_distribution_charge : torch.Tensor
+        A copy of the initial per-particle charges used to restore the beam
+        after toggling the shutter.
 
     Methods
     -------
@@ -30,14 +34,14 @@ class CheetahSimulator:
         Retrieves the energy of the beam at every element in the segment.
     set_shutter(value: bool)
         Sets the beam shutter state, controlling whether the beam is present or not.
-
-
     """
 
     def __init__(
-        self,
+        self, *,
         segment: Segment,
-        initial_beam_distribution: Beam,
+        initial_beam_distribution: Beam | None = None,
+        initial_particle_group: ParticleGroup | None = None
+
     ) -> None:
         """
         Simulator class for Cheetah accelerator simulations.
@@ -46,20 +50,29 @@ class CheetahSimulator:
         ----------
         segment : Segment
             The Cheetah Segment representing the accelerator configuration.
-        initial_beam_distribution : Beam
+        initial_beam_distribution : Beam, optional
             The initial beam distribution to be tracked through the segment.
-        shutter_pv : str, optional
-            The process variable name for the beam shutter, if applicable.
-
+        initial_particle_group : ParticleGroup, optional
+            An openPMD beamphysics ParticleGroup that will be converted into a
+            Cheetah ParticleBeam. Must be provided if `initial_beam_distribution`
+            is not.
         """
 
         self.segment = segment
         self._initial_segment = deepcopy(segment)
-        self.initial_beam_distribution = initial_beam_distribution.clone()
+
+
+        if initial_beam_distribution and not initial_particle_group:
+            self.initial_beam_distribution = initial_beam_distribution.clone()
+        elif initial_particle_group and not initial_beam_distribution:
+            self.initial_beam_distribution = particlegroup_to_cheetah_beam(
+            initial_particle_group)
+        else:
+            raise ValueError("""Must provide either initial_beam_distribution"""
+            """or initial_particle_group.""")
+        
+
         self.beam_distribution = self.initial_beam_distribution.clone()
-        self.initial_beam_distribution_charge = (
-            initial_beam_distribution.particle_charges
-        )
 
         self.track()
         self.energies = self.get_energy(self.segment)
