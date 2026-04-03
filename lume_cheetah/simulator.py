@@ -62,17 +62,20 @@ class CheetahSimulator:
         )
 
         self.track()
-        self.energies = self.get_energy()
+        self.energies = self.get_energy(self.segment)
+        self.energies_flattened = self.get_energy(self.segment.flattened())
 
     def reset(self):
         self.segment = deepcopy(self._initial_segment)
         self.track()
-        self.energies = self.get_energy()
+        self.energies = self.get_energy(self.segment)
+        self.energies_flattened = self.get_energy(self.segment.flattened())
 
     def track(self):
         self.segment.track(self.beam_distribution)
 
-    def get_energy(self):
+    def get_energy(self, segment):
+
         """
         Get the energy of the beam in the virtual accelerator simulator at
         every element for use in calculating the magnetic rigidity.
@@ -82,7 +85,7 @@ class CheetahSimulator:
         test_beam = ParticleBeam(
             torch.zeros(1, 7), energy=self.beam_distribution.energy
         )
-        test_segment = deepcopy(self.segment)
+        test_segment = deepcopy(segment)
         element_names = [e.name for e in test_segment.elements]
         return dict(
             zip(
