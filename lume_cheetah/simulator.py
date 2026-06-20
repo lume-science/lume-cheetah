@@ -71,7 +71,10 @@ class CheetahSimulator(torch.nn.Module):
         else:
             raise ValueError("""Must provide either initial_beam_distribution"""
             """or initial_particle_group.""")
-        
+
+        self.initial_beam_distribution_charge = (
+            self.initial_beam_distribution.particle_charges.clone()
+        )
 
         self.beam_distribution = self.initial_beam_distribution.clone()
 
@@ -80,6 +83,7 @@ class CheetahSimulator(torch.nn.Module):
 
     def reset(self):
         self.segment = deepcopy(self._initial_segment)
+        self.beam_distribution = self.initial_beam_distribution.clone()
         self.track()
         self.energies = self.get_energy()
 
@@ -111,7 +115,9 @@ class CheetahSimulator(torch.nn.Module):
         If `value` is True, the shutter is closed (no beam), otherwise it is open (beam present).
         """
         if value:
-            self.beam_distribution.particle_charges = torch.tensor(0.0)
+            self.beam_distribution.particle_charges = torch.zeros_like(
+                self.beam_distribution.particle_charges
+            )
         else:
             self.beam_distribution.particle_charges = (
                 self.initial_beam_distribution_charge.clone()
