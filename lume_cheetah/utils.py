@@ -1,5 +1,5 @@
 import cheetah
-from pmd_beamphysics import ParticleGroup
+from beamphysics import ParticleGroup
 import torch
 
 def particlegroup_to_cheetah_beam(
