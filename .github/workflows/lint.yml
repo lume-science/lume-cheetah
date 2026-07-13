@@ -1,9 +1,24 @@
 name: Lint
 on:
-  push:
   pull_request:
+  workflow_dispatch:
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
+  delete-cancelled-runs:
+    permissions:
+      actions: write
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'MercuryTechnologies/delete-cancelled-runs@1.0.0'
+        with:
+          workflow-file: 'lint.yml'
+          max-deletions: 1
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -17,20 +32,33 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync --extra dev
 
+      - name: Install pre-commit
+        run: uv pip install pre-commit
+
       - name: List Python package versions
         run: uv pip list
 
-      - name: Run pre-commit on all files
+      - name: Run notebook clearing check first (no diff)
+        env:
+          RUFF_OUTPUT_FORMAT: github
         run: |
-          uv run --no-sync pre-commit run \
+          uv run pre-commit run jupyter-notebook-clear-output --all-files
+
+      - name: Switch to a temporary branch
+        run: |
+          git checkout -b _ci_branch_
+
+      - name: Run pre-commit on all files
+        env:
+          RUFF_OUTPUT_FORMAT: github
+        run: |
+          uv run pre-commit run \
             --show-diff-on-failure \
             --color=always \
             --all-files
