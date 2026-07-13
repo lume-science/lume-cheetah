@@ -7,7 +7,7 @@ name = "lume-cheetah"
 dynamic = ["version"]
 description = "Cheetah-specific implementation of LUMEModel classes for virtual accelerators"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "SLAC National Accelerator Laboratory"}
@@ -17,14 +17,13 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    "lume-base @ git+https://github.com/slaclab/lume-base",
+    "lume-base",
     "cheetah-accelerator"
 ]
 
