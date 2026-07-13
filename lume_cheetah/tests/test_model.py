@@ -2,10 +2,10 @@ from cheetah.accelerator import Segment, Quadrupole, Drift
 from cheetah.particles import ParticleBeam
 import pytest
 import torch
-from lume_cheetah.actions import CheetahWritableActionMixin
+from lume.exceptions import ReadOnlyError
+from lume_cheetah.actions import CheetahWritableScalarVariable, CheetahReadOnlyScalarVariable
 from lume_cheetah.model import LUMECheetahModel
 from lume_cheetah.simulator import CheetahSimulator
-from lume_torch.variables import TorchScalarVariable
 
 class TestLUMECheetahModel:
     @pytest.fixture
@@ -26,12 +26,14 @@ class TestLUMECheetahModel:
 
         simulator = CheetahSimulator(segment=segment, initial_beam_distribution=particle_beam)
 
-        # Define action variables (e.g., quadrupole strength)
-        class Q1K1Variable(TorchScalarVariable, CheetahWritableActionMixin):
-            pass
-
         variables = [
-            Q1K1Variable(name="Q1_k", element_name="Q1", attribute_name="k1"),
+            CheetahWritableScalarVariable(
+                name="Q1_k", element_name="Q1", element_attribute="k1"
+            ),
+            CheetahReadOnlyScalarVariable(
+                name="Q1_k_readback", element_name="Q1", element_attribute="k1"
+            ),
+            
         ]
 
         return LUMECheetahModel(simulator, action_variables=variables)
@@ -44,6 +46,14 @@ class TestLUMECheetahModel:
         # Get the current value of the quadrupole strength
         value = model.get("Q1_k")
         assert value == torch.tensor(2.0)
+
+        # test getting the read-only variable
+        readback_value = model.get("Q1_k_readback")
+        assert readback_value == torch.tensor(2.0)
+
+        # try to set the read-only variable and expect an error
+        with pytest.raises(ReadOnlyError):
+            model.set({"Q1_k_readback": torch.tensor(3.0)})
 
     def test_update_state_reads_external_simulator_changes(self, model):
         model.simulator.segment.Q1.k1 = torch.tensor(3.0)

@@ -12,7 +12,7 @@ class _CheetahElementAccessMixin:
 
     def _resolve_element_and_energy(self, simulator):
         """Resolve target element object(s) and matching beam energy."""
-        element = simulator.segment.elements.get(self.element_name)
+        element = getattr(simulator.segment, self.element_name)
         energy = simulator.energies.get(self.element_name)
         return element, energy
 
@@ -40,32 +40,33 @@ class CheetahWritableActionMixin(_CheetahElementAccessMixin, WritableActionMixin
             raise TypeError("CheetahWritableActionMixin requires a CheetahSimulator.")
         self._set_direct_attribute(simulator, self.element_attribute, value)
 
-class CheetahReadonlyActionMixin(CheetahWritableActionMixin, ReadOnlyActionMixin):
+
+class CheetahReadOnlyActionMixin(CheetahWritableActionMixin, ReadOnlyActionMixin):
     """Read-only action mixin for Cheetah-backed PVs."""
 
     read_only = True
 
     def _get(self, simulator):
         if not isinstance(simulator, CheetahSimulator):
-            raise TypeError("CheetahReadonlyActionMixin requires a CheetahSimulator.")
+            raise TypeError("CheetahReadOnlyActionMixin requires a CheetahSimulator.")
         return self._get_direct_attribute(simulator, self.element_attribute)
     
     def _set(self, simulator, value):
-        raise TypeError("CheetahReadonlyActionMixin does not support setting values.")
+        raise RuntimeError("CheetahReadOnlyActionMixin does not support setting values.")
     
 
 class CheetahWritableScalarVariable(TorchScalarVariable, CheetahWritableActionMixin):
     """Writable scalar variable for Cheetah-backed PVs."""
 
-class CheetahReadonlyScalarVariable(TorchScalarVariable, CheetahReadonlyActionMixin):
+class CheetahReadOnlyScalarVariable(TorchScalarVariable, CheetahReadOnlyActionMixin):
     """Read-only scalar variable for Cheetah-backed PVs."""
 
 class CheetahWritableNDVariable(TorchNDVariable, CheetahWritableActionMixin):
     """Writable N-dimensional variable for Cheetah-backed PVs."""
 
-class CheetahReadonlyNDVariable(TorchNDVariable, CheetahReadonlyActionMixin):
+class CheetahReadOnlyNDVariable(TorchNDVariable, CheetahReadOnlyActionMixin):
     """Read-only N-dimensional variable for Cheetah-backed PVs."""
 
-class CheetahReadOnlyEnumVariable(EnumVariable, CheetahReadonlyActionMixin):
+class CheetahReadOnlyEnumVariable(EnumVariable, CheetahReadOnlyActionMixin):
     """Read-only enum variable for Cheetah-backed PVs."""
 
