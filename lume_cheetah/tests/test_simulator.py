@@ -48,16 +48,22 @@ def test_init_with_particle_group_uses_converter(monkeypatch):
         called["particle_group"] = particle_group
         return expected_beam
 
-    monkeypatch.setattr(simulator_module, "particlegroup_to_cheetah_beam", fake_converter)
+    monkeypatch.setattr(
+        simulator_module, "particlegroup_to_cheetah_beam", fake_converter
+    )
     particle_group = object()
-    simulator = CheetahSimulator(segment=_make_segment(), initial_particle_group=particle_group)
+    simulator = CheetahSimulator(
+        segment=_make_segment(), initial_particle_group=particle_group
+    )
 
     assert called["particle_group"] is particle_group
     assert torch.equal(simulator.initial_beam_distribution.energy, expected_beam.energy)
 
 
 def test_get_energy_returns_values_by_element_name():
-    simulator = CheetahSimulator(segment=_make_segment(), initial_beam_distribution=_make_beam())
+    simulator = CheetahSimulator(
+        segment=_make_segment(), initial_beam_distribution=_make_beam()
+    )
 
     energies = simulator.get_energy()
 
@@ -65,7 +71,9 @@ def test_get_energy_returns_values_by_element_name():
 
 
 def test_reset_restores_segment_and_beam_distribution():
-    simulator = CheetahSimulator(segment=_make_segment(), initial_beam_distribution=_make_beam())
+    simulator = CheetahSimulator(
+        segment=_make_segment(), initial_beam_distribution=_make_beam()
+    )
     initial_k1 = simulator.segment.Q1.k1.clone()
     initial_charge = simulator.initial_beam_distribution_charge.clone()
 
@@ -78,7 +86,9 @@ def test_reset_restores_segment_and_beam_distribution():
 
 
 def test_set_shutter_closes_and_reopens_beam():
-    simulator = CheetahSimulator(segment=_make_segment(), initial_beam_distribution=_make_beam())
+    simulator = CheetahSimulator(
+        segment=_make_segment(), initial_beam_distribution=_make_beam()
+    )
     initial_charge = simulator.initial_beam_distribution_charge.clone()
 
     simulator.set_shutter(True)

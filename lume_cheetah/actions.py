@@ -5,6 +5,7 @@ from lume.exceptions import ReadOnlyError
 
 from lume_cheetah.simulator import CheetahSimulator
 
+
 class _CheetahElementAccessMixin:
     """Shared element/energy resolution and direct attribute helpers."""
 
@@ -52,23 +53,28 @@ class CheetahReadOnlyActionMixin(CheetahWritableActionMixin, ReadOnlyActionMixin
         if not isinstance(simulator, CheetahSimulator):
             raise TypeError("CheetahReadOnlyActionMixin requires a CheetahSimulator.")
         return self._get_direct_attribute(simulator, self.element_attribute)
-    
+
     def _set(self, simulator, value):
-        raise ReadOnlyError("CheetahReadOnlyActionMixin does not support setting values.")
-    
+        raise ReadOnlyError(
+            "CheetahReadOnlyActionMixin does not support setting values."
+        )
+
 
 class CheetahWritableScalarVariable(TorchScalarVariable, CheetahWritableActionMixin):
     """Writable scalar variable for Cheetah-backed PVs."""
 
+
 class CheetahReadOnlyScalarVariable(TorchScalarVariable, CheetahReadOnlyActionMixin):
     """Read-only scalar variable for Cheetah-backed PVs."""
+
 
 class CheetahWritableNDVariable(TorchNDVariable, CheetahWritableActionMixin):
     """Writable N-dimensional variable for Cheetah-backed PVs."""
 
+
 class CheetahReadOnlyNDVariable(TorchNDVariable, CheetahReadOnlyActionMixin):
     """Read-only N-dimensional variable for Cheetah-backed PVs."""
 
+
 class CheetahReadOnlyEnumVariable(EnumVariable, CheetahReadOnlyActionMixin):
     """Read-only enum variable for Cheetah-backed PVs."""
-

@@ -2,13 +2,14 @@ import cheetah
 from beamphysics import ParticleGroup
 import torch
 
+
 def particlegroup_to_cheetah_beam(
     pg: ParticleGroup,
     dtype: torch.dtype = torch.float32,
     device: torch.device | str | None = None,
 ):
     """Convert an openPMD-beamphysics ParticleGroup to a Cheetah ParticleBeam."""
-    #TODO: add exception catching that lets user know if PG doesn't have this
+    # TODO: add exception catching that lets user know if PG doesn't have this
     energy = torch.as_tensor(pg["energy"], dtype=dtype, device=device).mean()
     particle_beam = cheetah.ParticleBeam.from_openpmd_particlegroup(
         particle_group=pg,

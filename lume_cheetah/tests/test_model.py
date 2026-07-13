@@ -3,18 +3,24 @@ from cheetah.particles import ParticleBeam
 import pytest
 import torch
 from lume.exceptions import ReadOnlyError
-from lume_cheetah.actions import CheetahWritableScalarVariable, CheetahReadOnlyScalarVariable
+from lume_cheetah.actions import (
+    CheetahWritableScalarVariable,
+    CheetahReadOnlyScalarVariable,
+)
 from lume_cheetah.model import LUMECheetahModel
 from lume_cheetah.simulator import CheetahSimulator
+
 
 class TestLUMECheetahModel:
     @pytest.fixture
     def model(self):
         # Create a simple accelerator with a quadrupole and a drift
-        segment = Segment([
-            Quadrupole(name="Q1", length=torch.tensor(0.5), k1=torch.tensor(1.0)),
-            Drift(name="D1", length=torch.tensor(1.0)),
-        ])
+        segment = Segment(
+            [
+                Quadrupole(name="Q1", length=torch.tensor(0.5), k1=torch.tensor(1.0)),
+                Drift(name="D1", length=torch.tensor(1.0)),
+            ]
+        )
 
         # Create a simple particle beam
         particle_beam = ParticleBeam.from_twiss(
@@ -24,7 +30,9 @@ class TestLUMECheetahModel:
             energy=torch.tensor(1e6),
         )
 
-        simulator = CheetahSimulator(segment=segment, initial_beam_distribution=particle_beam)
+        simulator = CheetahSimulator(
+            segment=segment, initial_beam_distribution=particle_beam
+        )
 
         variables = [
             CheetahWritableScalarVariable(
@@ -33,7 +41,6 @@ class TestLUMECheetahModel:
             CheetahReadOnlyScalarVariable(
                 name="Q1_k_readback", element_name="Q1", element_attribute="k1"
             ),
-            
         ]
 
         return LUMECheetahModel(simulator, action_variables=variables)
