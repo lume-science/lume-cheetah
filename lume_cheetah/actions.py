@@ -10,20 +10,21 @@ class _CheetahElementAccessMixin:
     element_name: str
     element_attribute: str
 
-    def _resolve_element_and_energy(self, simulator):
+    @staticmethod
+    def _resolve_element_and_energy(simulator, element_name: str):
         """Resolve target element object(s) and matching beam energy."""
-        element = getattr(simulator.segment, self.element_name)
-        energy = simulator.energies.get(self.element_name)
+        element = getattr(simulator.segment, element_name)
+        energy = simulator.energies.get(element_name)
         return element, energy
 
     def _get_direct_attribute(self, simulator, attribute_name: str):
         """Read a direct element attribute from the first resolved element."""
-        element, _ = self._resolve_element_and_energy(simulator)
+        element, _ = self._resolve_element_and_energy(simulator, self.element_name)
         return getattr(element, attribute_name)
 
     def _set_direct_attribute(self, simulator, attribute_name: str, value):
         """Set a direct element attribute on all resolved split elements."""
-        element, _ = self._resolve_element_and_energy(simulator)
+        element, _ = self._resolve_element_and_energy(simulator, self.element_name)
         setattr(element, attribute_name, value)
 
 
