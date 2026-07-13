@@ -34,4 +34,4 @@ def test_particlegroup_to_cheetah_beam_passes_expected_arguments(monkeypatch):
     assert torch.equal(calls["energy"], torch.tensor(4.0, dtype=torch.float64))
     assert calls["dtype"] == torch.float64
     assert calls["device"] == "cpu"
-    assert torch.equal(beam.particle_charges, torch.tensor(1.0))
+    assert torch.equal(beam.particle_charges, torch.tensor(1.0, dtype=torch.float64, device="cpu"))

@@ -77,8 +77,8 @@ class LUMECheetahModel(ActionModel, torch.nn.Module):
         Update the model state by reading all supported variables.
         """
         # get the current state from the simulator
-        for name in self.supported_variables.keys():
-            self._state[name] = self._action_variable_by_name[name]._get(self.simulator)
+        for name, var in self.supported_variables.items():
+            self._state[name] = var._get(self.simulator)
 
     def reset(self):
         """

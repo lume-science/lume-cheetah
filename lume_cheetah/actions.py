@@ -1,6 +1,7 @@
 from lume.actions import WritableActionMixin, ReadOnlyActionMixin
 from lume_torch.variables import TorchScalarVariable, TorchNDVariable
 from lume.variables import EnumVariable
+from lume.exceptions import ReadOnlyError
 
 from lume_cheetah.simulator import CheetahSimulator
 
@@ -53,7 +54,7 @@ class CheetahReadOnlyActionMixin(CheetahWritableActionMixin, ReadOnlyActionMixin
         return self._get_direct_attribute(simulator, self.element_attribute)
     
     def _set(self, simulator, value):
-        raise RuntimeError("CheetahReadOnlyActionMixin does not support setting values.")
+        raise ReadOnlyError("CheetahReadOnlyActionMixin does not support setting values.")
     
 
 class CheetahWritableScalarVariable(TorchScalarVariable, CheetahWritableActionMixin):
