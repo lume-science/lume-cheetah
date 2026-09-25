@@ -50,7 +50,7 @@ model = LUMECheetahModel(simulator=simulator, action_variables=action_variables)
 
 # 6) Use the model API
 model.set({"Q1_k1": torch.tensor(2.0)})
-current_value = model.get("Q1_k1")
+current_value = model.get_value("Q1_k1")
 print("Q1.k1 =", current_value)
 
 # Optional: sync model state if the simulator was changed externally
