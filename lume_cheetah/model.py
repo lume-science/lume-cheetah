@@ -1,10 +1,15 @@
+from beamphysics import ParticleGroup
 from lume.actions import ActionModel
 from lume.variables import Variable
+from lume.staged_model import InitialParticlesMixIn, FinalParticlesMixIn
 from lume_cheetah.simulator import CheetahSimulator
+
+from cheetah.particles import ParticleBeam
+
 import torch
 
 
-class LUMECheetahModel(ActionModel, torch.nn.Module):
+class LUMECheetahModel(ActionModel, torch.nn.Module, InitialParticlesMixIn, FinalParticlesMixIn):
     """
     LumeModel subclass for wrapping Cheetah Simulations
 
@@ -34,6 +39,7 @@ class LUMECheetahModel(ActionModel, torch.nn.Module):
         super().__init__(simulator, action_variables)
 
         self._state = {}
+        self._final_distribution: ParticleBeam | None = None
 
         self.update_state()
 
@@ -50,7 +56,7 @@ class LUMECheetahModel(ActionModel, torch.nn.Module):
         super()._set(values)
 
         # track the simulator to update the state
-        self.simulator.track()
+        self._final_distribution = self.simulator.track()
 
         # get the new state from the simulator
         self.update_state()
@@ -86,3 +92,22 @@ class LUMECheetahModel(ActionModel, torch.nn.Module):
         """
         self.simulator.reset()
         self.update_state()
+
+    @property
+    def initial_particles(self) -> ParticleGroup:
+        return self.simulator.beam_distribution.clone().to_openpmd_particlegroup()
+
+    @initial_particles.setter
+    def initial_particles(self, particles: ParticleGroup):
+        self.simulator.beam_distribution = ParticleBeam.from_openpmd_particlegroup(
+            particles,
+            energy=torch.tensor(particles.energy.mean())
+        )
+        # need to run tracking when updating initial particles
+        self.set({})
+
+    @property
+    def final_particles(self) -> ParticleGroup:
+        if self._final_distribution is None:
+            raise RuntimeError("final distribution is none")
+        return self._final_distribution.clone().to_openpmd_particlegroup()

@@ -90,8 +90,8 @@ class CheetahSimulator(torch.nn.Module):
         self.track()
         self.energies = self.get_energy()
 
-    def track(self):
-        self.segment.track(self.beam_distribution)
+    def track(self) -> Beam:
+        return self.segment.track(self.beam_distribution)
 
     def get_energy(self):
         """

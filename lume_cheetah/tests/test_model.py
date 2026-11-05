@@ -1,3 +1,5 @@
+from beamphysics import ParticleGroup
+
 from cheetah.accelerator import Segment, Quadrupole, Drift
 from cheetah.particles import ParticleBeam
 import pytest
@@ -75,3 +77,18 @@ class TestLUMECheetahModel:
         model.reset()
 
         assert model.get("Q1_k") == torch.tensor(1.0)
+
+    def test_staged_model_initial_and_final_particles(self, model):
+        # Check that the initial particles are set correctly
+        initial_particles = model.initial_particles
+        assert isinstance(initial_particles, ParticleGroup)
+        assert initial_particles.n_particle == 1000
+
+        # Run the model to get final particles
+        model.set({"Q1_k": torch.tensor(2.0)})
+        final_particles = model.final_particles
+        assert isinstance(final_particles, ParticleGroup)
+        assert final_particles.n_particle == 1000
+
+        # test roundtrip conversion
+        

@@ -1,9 +1,11 @@
+
 from lume.actions import WritableActionMixin, ReadOnlyActionMixin
 from lume_torch.variables import TorchScalarVariable, TorchNDVariable
 from lume.variables import EnumVariable
 from lume.exceptions import ReadOnlyError
 
 from lume_cheetah.simulator import CheetahSimulator
+from cheetah.accelerator import Screen
 
 
 class _CheetahElementAccessMixin:
@@ -28,6 +30,16 @@ class _CheetahElementAccessMixin:
         """Set a direct element attribute on all resolved split elements."""
         element, _ = self._resolve_element_and_energy(simulator, self.element_name)
         setattr(element, attribute_name, value)
+
+class _CheetahBeamAccessMixin:
+    element_name: str
+
+    def _get_read_beam(self, simulator):
+        """Get the read beam for the resolved element. Currently only works for screens"""
+        element = getattr(simulator.segment, self.element_name)
+        if not isinstance(element, Screen):
+            raise TypeError("Read beam is only available for Screen elements.")
+        return element.get_read_beam()
 
 
 class CheetahWritableActionMixin(_CheetahElementAccessMixin, WritableActionMixin):
@@ -78,3 +90,12 @@ class CheetahReadOnlyNDVariable(TorchNDVariable, CheetahReadOnlyActionMixin):
 
 class CheetahReadOnlyEnumVariable(EnumVariable, CheetahReadOnlyActionMixin):
     """Read-only enum variable for Cheetah-backed PVs."""
+
+
+class CheetahBeamPropertyVariable(TorchScalarVariable, _CheetahBeamAccessMixin, ReadOnlyActionMixin):
+    """Read-only beam property variable for Cheetah-backed PVs."""
+    beam_property: str
+
+    def _get(self, simulator):
+        read_beam = self._get_read_beam(simulator)
+        return getattr(read_beam, self.beam_property)
