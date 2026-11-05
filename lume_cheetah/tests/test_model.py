@@ -53,11 +53,11 @@ class TestLUMECheetahModel:
         assert model.simulator.segment.Q1.k1 == torch.tensor(2.0)
 
         # Get the current value of the quadrupole strength
-        value = model.get("Q1_k")
+        value = model.get_value("Q1_k")
         assert value == torch.tensor(2.0)
 
         # test getting the read-only variable
-        readback_value = model.get("Q1_k_readback")
+        readback_value = model.get_value("Q1_k_readback")
         assert readback_value == torch.tensor(2.0)
 
         # try to set the read-only variable and expect an error
@@ -69,14 +69,14 @@ class TestLUMECheetahModel:
 
         model.update_state()
 
-        assert model.get("Q1_k") == torch.tensor(3.0)
+        assert model.get_value("Q1_k") == torch.tensor(3.0)
 
     def test_reset_restores_initial_state(self, model):
         model.set({"Q1_k": torch.tensor(2.0)})
 
         model.reset()
 
-        assert model.get("Q1_k") == torch.tensor(1.0)
+        assert model.get_value("Q1_k") == torch.tensor(1.0)
 
     def test_staged_model_initial_and_final_particles(self, model):
         # Check that the initial particles are set correctly
