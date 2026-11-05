@@ -9,7 +9,9 @@ from cheetah.particles import ParticleBeam
 import torch
 
 
-class LUMECheetahModel(ActionModel, torch.nn.Module, InitialParticlesMixIn, FinalParticlesMixIn):
+class LUMECheetahModel(
+    ActionModel, torch.nn.Module, InitialParticlesMixIn, FinalParticlesMixIn
+):
     """
     LumeModel subclass for wrapping Cheetah Simulations
 
@@ -100,8 +102,7 @@ class LUMECheetahModel(ActionModel, torch.nn.Module, InitialParticlesMixIn, Fina
     @initial_particles.setter
     def initial_particles(self, particles: ParticleGroup):
         self.simulator.beam_distribution = ParticleBeam.from_openpmd_particlegroup(
-            particles,
-            energy=torch.tensor(particles.energy.mean())
+            particles, energy=torch.tensor(particles.energy.mean())
         )
         # need to run tracking when updating initial particles
         self.set({})

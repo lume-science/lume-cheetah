@@ -1,4 +1,3 @@
-
 from lume.actions import WritableActionMixin, ReadOnlyActionMixin
 from lume_torch.variables import TorchScalarVariable, TorchNDVariable
 from lume.variables import EnumVariable
@@ -30,6 +29,7 @@ class _CheetahElementAccessMixin:
         """Set a direct element attribute on all resolved split elements."""
         element, _ = self._resolve_element_and_energy(simulator, self.element_name)
         setattr(element, attribute_name, value)
+
 
 class _CheetahBeamAccessMixin:
     element_name: str
@@ -92,8 +92,11 @@ class CheetahReadOnlyEnumVariable(EnumVariable, CheetahReadOnlyActionMixin):
     """Read-only enum variable for Cheetah-backed PVs."""
 
 
-class CheetahBeamPropertyVariable(TorchScalarVariable, _CheetahBeamAccessMixin, ReadOnlyActionMixin):
+class CheetahBeamPropertyVariable(
+    TorchScalarVariable, _CheetahBeamAccessMixin, ReadOnlyActionMixin
+):
     """Read-only beam property variable for Cheetah-backed PVs."""
+
     beam_property: str
 
     def _get(self, simulator):

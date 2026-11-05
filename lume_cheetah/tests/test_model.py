@@ -91,4 +91,3 @@ class TestLUMECheetahModel:
         assert final_particles.n_particle == 1000
 
         # test roundtrip conversion
-        
