@@ -99,4 +99,3 @@ overlay.set(ENLD_MeV=120.0, f=0.95)
 final_beam = simulator.track()
 simulator.reset()  # restores initial overlay values and rebinds the same object
 ```
-
