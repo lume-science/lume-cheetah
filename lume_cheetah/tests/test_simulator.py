@@ -4,6 +4,7 @@ from cheetah.accelerator import Cavity, Drift, Quadrupole, Segment
 from cheetah.particles import ParticleBeam
 
 from lume_cheetah import simulator as simulator_module
+from lume_cheetah import CheetahOverlay
 from lume_cheetah.simulator import CheetahSimulator
 
 
@@ -144,3 +145,210 @@ def test_set_shutter_closes_and_reopens_beam():
 
     simulator.set_shutter(False)
     assert torch.equal(simulator.beam_distribution.particle_charges, initial_charge)
+
+
+def _make_rf_overlay_simulator(enld=100.0):
+    weights = {
+        "K21_1B": 0.4142135623730951,
+        "K21_1C": 0.2928932188134525,
+        "K21_1D": 0.2928932188134525,
+    }
+    segment = Segment(
+        [
+            Cavity(
+                name=name,
+                length=torch.tensor(length),
+                frequency=torch.tensor(2.856e9),
+            )
+            for name, length in zip(weights, [2.8692, 2.8692, 3.0441], strict=True)
+        ]
+    )
+    targets = {}
+    for name, weight in weights.items():
+        targets[name, "voltage"] = lambda v, weight=weight: (
+            v["f"] * v["in_use"] * v["ENLD_MeV"] * 1e6 * weight
+        )
+        targets[name, "phase"] = lambda v: v["phase_deg"]
+    overlay = CheetahOverlay(
+        "K21_1",
+        variables={"ENLD_MeV": enld, "phase_deg": 0.0, "f": 1.0, "in_use": 1.0},
+        targets=targets,
+    )
+    simulator = CheetahSimulator(
+        segment=segment,
+        initial_beam_distribution=_make_beam(),
+        overlays=[overlay],
+    )
+    return simulator, overlay, weights
+
+
+def test_overlay_fans_out_voltage_and_phase_and_tracks():
+    simulator, overlay, weights = _make_rf_overlay_simulator()
+    assert simulator.overlays["K21_1"] is overlay
+    for name, weight in weights.items():
+        assert getattr(simulator.segment, name).voltage.item() == pytest.approx(
+            100e6 * weight
+        )
+    assert simulator.energies["K21_1C"].item() == pytest.approx(
+        1e6 + 100e6 * weights["K21_1B"]
+    )
+
+    overlay.phase_deg = 60.0
+    overlay.set(ENLD_MeV=120.0, f=0.95)
+    for name, weight in weights.items():
+        cavity = getattr(simulator.segment, name)
+        assert cavity.voltage.item() == pytest.approx(120e6 * 0.95 * weight)
+        assert cavity.phase.item() == 60.0
+    assert simulator.track().energy.item() == pytest.approx(1e6 + 120e6 * 0.95 * 0.5)
+
+    overlay.in_use = 0.0
+    for cavity in simulator.segment.elements:
+        assert cavity.voltage.item() == 0.0
+    assert simulator.track().energy.item() == pytest.approx(1e6)
+
+
+def test_overlay_reset_restores_variables_and_rebinds_existing_reference():
+    simulator, overlay, weights = _make_rf_overlay_simulator()
+    old_cavity = simulator.segment.K21_1B
+    overlay.set(ENLD_MeV=20.0, phase_deg=30.0)
+    simulator.reset()
+
+    assert simulator.overlays["K21_1"] is overlay
+    assert overlay.ENLD_MeV == 100.0
+    assert overlay.phase_deg == 0.0
+    assert simulator.segment.K21_1B is not old_cavity
+    assert simulator.segment.K21_1B.voltage.item() == pytest.approx(
+        100e6 * weights["K21_1B"]
+    )
+    overlay.phase_deg = 45.0
+    assert simulator.segment.K21_1B.phase.item() == 45.0
+    assert old_cavity.phase.item() == 30.0
+
+
+def test_overlay_preserves_batches_dtype_and_gradients():
+    enld = torch.tensor([100.0, 120.0], dtype=torch.float64, requires_grad=True)
+    simulator, overlay, _ = _make_rf_overlay_simulator(enld)
+    for cavity in simulator.segment.elements:
+        assert cavity.voltage.shape == (2,)
+        assert cavity.voltage.dtype == torch.float32
+    assert simulator.get_energy()["K21_1C"].shape == (2,)
+    torch.testing.assert_close(
+        torch.autograd.grad(simulator.track().energy.sum(), enld)[0],
+        torch.full_like(enld, 1e6),
+    )
+
+    phase = torch.tensor([30.0, 60.0], dtype=torch.float64, requires_grad=True)
+    overlay.set(ENLD_MeV=100.0, phase_deg=phase)
+    energy = simulator.track().energy
+    torch.testing.assert_close(
+        energy, (1e6 + 100e6 * torch.cos(torch.deg2rad(phase))).float()
+    )
+    torch.testing.assert_close(
+        torch.autograd.grad(energy.sum(), phase)[0],
+        -100e6 * torch.sin(torch.deg2rad(phase)) * torch.pi / 180,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    simulator.reset()
+    torch.testing.assert_close(overlay.ENLD_MeV, enld)
+
+
+def test_overlay_updates_repeated_names_in_nested_segments():
+    first = Quadrupole(name="Q1", length=torch.tensor(0.5))
+    second = Quadrupole(name="Q1", length=torch.tensor(0.5))
+    segment = Segment([first, Segment([second], name="nested")])
+    overlay = CheetahOverlay(
+        "family",
+        variables={"strength": 1.0},
+        targets={("Q1", "k1"): lambda v: 2 * v["strength"]},
+    )
+    CheetahSimulator(
+        segment=segment, initial_beam_distribution=_make_beam(), overlays=[overlay]
+    )
+    overlay.strength = 3.0
+    assert first.k1.item() == second.k1.item() == 6.0
+
+
+def test_overlay_evaluation_failure_does_not_partially_update():
+    overlay = CheetahOverlay(
+        "family",
+        variables={"strength": 1.0},
+        targets={
+            ("Q1", "k1"): lambda v: 2 * v["strength"],
+            ("D1", "length"): lambda v: 1 / v["strength"],
+        },
+    )
+    simulator = CheetahSimulator(
+        segment=_make_segment(),
+        initial_beam_distribution=_make_beam(),
+        overlays=[overlay],
+    )
+    with pytest.raises(ZeroDivisionError):
+        overlay.strength = 0.0
+    assert overlay.strength == 1.0
+    assert simulator.segment.Q1.k1.item() == 2.0
+    assert simulator.segment.D1.length.item() == 1.0
+    with pytest.raises(AttributeError, match="no variable"):
+        overlay.typo = 2.0
+    with pytest.raises(TypeError, match="number or tensor"):
+        overlay.strength = "bad"
+    with pytest.raises(TypeError):
+        overlay.variables["strength"] = 0.0
+
+
+@pytest.mark.parametrize(
+    "target, message",
+    [
+        (("missing", "k1"), "not found"),
+        (("Q1", "gradient_err"), "existing tensor"),
+        (("Q1", "name"), "existing tensor"),
+    ],
+)
+def test_overlay_rejects_missing_or_non_tensor_targets(target, message):
+    overlay = CheetahOverlay(
+        "family", variables={"strength": 1.0}, targets={target: lambda v: v["strength"]}
+    )
+    with pytest.raises(ValueError, match=message):
+        CheetahSimulator(
+            segment=_make_segment(),
+            initial_beam_distribution=_make_beam(),
+            overlays=[overlay],
+        )
+
+
+@pytest.mark.parametrize("variable", ["name", "set", "variables", "_targets", "a-b"])
+def test_overlay_rejects_reserved_variable_names(variable):
+    with pytest.raises(ValueError, match="Invalid or reserved"):
+        CheetahOverlay(
+            "family",
+            variables={variable: 1.0},
+            targets={("Q1", "k1"): lambda v: 1.0},
+        )
+
+
+@pytest.mark.parametrize("same_name", [True, False])
+def test_simulator_rejects_conflicting_overlays(same_name):
+    overlays = [
+        CheetahOverlay(
+            name,
+            variables={"strength": 1.0},
+            targets={("Q1", "k1"): lambda v: v["strength"]},
+        )
+        for name in ["family", "family" if same_name else "other"]
+    ]
+    with pytest.raises(ValueError, match="Duplicate overlay|Multiple overlays"):
+        CheetahSimulator(
+            segment=_make_segment(),
+            initial_beam_distribution=_make_beam(),
+            overlays=overlays,
+        )
+
+
+def test_overlay_cannot_be_reused_by_another_simulator():
+    _, overlay, _ = _make_rf_overlay_simulator()
+    with pytest.raises(ValueError, match="already bound"):
+        CheetahSimulator(
+            segment=_make_segment(),
+            initial_beam_distribution=_make_beam(),
+            overlays=[overlay],
+        )
