@@ -1,6 +1,6 @@
 import pytest
 import torch
-from cheetah.accelerator import Drift, Quadrupole, Segment
+from cheetah.accelerator import Cavity, Drift, Quadrupole, Segment
 from cheetah.particles import ParticleBeam
 
 from lume_cheetah import simulator as simulator_module
@@ -68,6 +68,51 @@ def test_get_energy_returns_values_by_element_name():
     energies = simulator.get_energy()
 
     assert set(energies.keys()) == {"Q1", "D1"}
+
+
+@pytest.mark.parametrize(
+    "energy",
+    [1e6, [1e6], [1e6, 2e6], [[1e6, 2e6], [3e6, 4e6]]],
+)
+def test_get_energy_preserves_batches_and_uses_element_entrances(energy):
+    energy = torch.tensor(energy)
+    segment = Segment(
+        [
+            Drift(name="D1", length=torch.tensor(0.1)),
+            Cavity(
+                name="C1",
+                length=torch.tensor(0.1),
+                voltage=torch.tensor(1e6),
+                phase=torch.tensor(0.0),
+                frequency=torch.tensor(2.856e9),
+            ),
+            Drift(name="D2", length=torch.tensor(0.1)),
+            Cavity(
+                name="C2",
+                length=torch.tensor(0.1),
+                voltage=torch.tensor(2e6),
+                phase=torch.tensor(0.0),
+                frequency=torch.tensor(2.856e9),
+            ),
+        ]
+    )
+    beam = ParticleBeam(
+        particles=torch.zeros(1, 7),
+        energy=energy,
+        particle_charges=torch.tensor([1.0]),
+    )
+    simulator = CheetahSimulator(segment=segment, initial_beam_distribution=beam)
+    expected = {"D1": energy, "C1": energy, "D2": energy + 1e6, "C2": energy + 1e6}
+
+    for energies in (simulator.energies, simulator.get_energy()):
+        assert energies.keys() == expected.keys()
+        for name, value in expected.items():
+            torch.testing.assert_close(energies[name], value)
+
+    simulator.reset()
+    assert simulator.energies.keys() == expected.keys()
+    for name, value in expected.items():
+        torch.testing.assert_close(simulator.energies[name], value)
 
 
 def test_reset_restores_segment_and_beam_distribution():

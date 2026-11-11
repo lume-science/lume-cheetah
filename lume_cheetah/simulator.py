@@ -93,10 +93,11 @@ class CheetahSimulator(torch.nn.Module):
     def track(self) -> Beam:
         return self.segment.track(self.beam_distribution)
 
-    def get_energy(self):
+    def get_energy(self) -> dict[str, torch.Tensor]:
         """
-        Get the energy of the beam in the virtual accelerator simulator at
-        every element for use in calculating the magnetic rigidity.
+        Get reference energies in eV at each element entrance for calculating
+        magnetic rigidity. Values preserve beam/lattice batch dimensions.
+        Repeated element names retain the last occurrence's entrance energy.
 
         Note: need to track on a copy of the segment to not influence readings!
         """
@@ -105,10 +106,14 @@ class CheetahSimulator(torch.nn.Module):
         )
         test_segment = deepcopy(self.segment)
         element_names = [e.name for e in test_segment.elements]
+        energies = test_segment.get_beam_attrs_along_segment(("energy",), test_beam)[0]
+        # Samples include the incoming beam and all exits; omit the final exit.
+        entrance_energies = energies[..., :-1].unbind(dim=-1)
         return dict(
             zip(
                 element_names,
-                test_segment.get_beam_attrs_along_segment(("energy",), test_beam)[0],
+                entrance_energies,
+                strict=True,
             )
         )
 
