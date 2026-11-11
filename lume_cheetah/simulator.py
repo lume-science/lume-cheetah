@@ -3,6 +3,7 @@ from copy import deepcopy
 from cheetah.accelerator import Segment
 from cheetah.particles import Beam, ParticleBeam
 from beamphysics import ParticleGroup
+from lume_cheetah.overlay import CheetahOverlay
 from lume_cheetah.utils import particlegroup_to_cheetah_beam
 
 
@@ -43,6 +44,7 @@ class CheetahSimulator(torch.nn.Module):
         segment: Segment,
         initial_beam_distribution: Beam | None = None,
         initial_particle_group: ParticleGroup | None = None,
+        overlays: list[CheetahOverlay] | None = None,
     ) -> None:
         """
         Simulator class for Cheetah accelerator simulations.
@@ -57,6 +59,10 @@ class CheetahSimulator(torch.nn.Module):
             An openPMD beamphysics ParticleGroup that will be converted into a
             Cheetah ParticleBeam. Must be provided if `initial_beam_distribution`
             is not.
+        overlays : list[CheetahOverlay], optional
+            Named callable overlays, exposed through ``simulator.overlays``.
+            Initial variable values are applied before tracking and restored
+            on reset. Each overlay may belong to only one simulator.
         """
         super().__init__()
 
@@ -81,11 +87,48 @@ class CheetahSimulator(torch.nn.Module):
 
         self.beam_distribution = self.initial_beam_distribution.clone()
 
+        self.overlays: dict[str, CheetahOverlay] = {}
+        claimed_targets = set()
+        for overlay in overlays or []:
+            if overlay.name in self.overlays:
+                raise ValueError(f"Duplicate overlay name: {overlay.name!r}")
+            overlap = claimed_targets.intersection(overlay._rules)
+            if overlap:
+                raise ValueError(
+                    f"Multiple overlays control targets: {sorted(overlap)}"
+                )
+            claimed_targets.update(overlay._rules)
+            self.overlays[overlay.name] = overlay
+        overlay_states = {
+            overlay: (overlay._variables, overlay._targets, overlay._initial_variables)
+            for overlay in self.overlays.values()
+        }
+        original_targets = []
+        elements = self.segment.flattened().elements
+        for overlay in self.overlays.values():
+            for element_name, attribute in overlay._rules:
+                for element in elements:
+                    if element.name == element_name and hasattr(element, attribute):
+                        original_targets.append(
+                            (element, attribute, getattr(element, attribute))
+                        )
+        try:
+            for overlay in self.overlays.values():
+                overlay._bind(self.segment)
+        except Exception:
+            for element, attribute, value in original_targets:
+                setattr(element, attribute, value)
+            for overlay, state in overlay_states.items():
+                overlay._variables, overlay._targets, overlay._initial_variables = state
+            raise
+
         self.track()
         self.energies = self.get_energy()
 
     def reset(self):
         self.segment = deepcopy(self._initial_segment)
+        for overlay in self.overlays.values():
+            overlay._bind(self.segment, reset=True)
         self.beam_distribution = self.initial_beam_distribution.clone()
         self.track()
         self.energies = self.get_energy()
@@ -104,7 +147,8 @@ class CheetahSimulator(torch.nn.Module):
         test_beam = ParticleBeam(
             torch.zeros(1, 7), energy=self.beam_distribution.energy
         )
-        test_segment = deepcopy(self.segment)
+        # Overlay outputs can be non-leaf tensors, which deepcopy cannot copy.
+        test_segment = self.segment.clone()
         element_names = [e.name for e in test_segment.elements]
         energies = test_segment.get_beam_attrs_along_segment(("energy",), test_beam)[0]
         # Samples include the incoming beam and all exits; omit the final exit.
