@@ -89,7 +89,7 @@ class CheetahOverlay:
             raise TypeError(f"Overlay variable {name!r} must be a number or tensor.")
         return value
 
-    def set(self, **values: OverlayValue) -> None:
+    def set(self, /, **values: OverlayValue) -> None:
         """Update variables together and immediately recompute all targets."""
         for name, value in values.items():
             if name not in self._variables:

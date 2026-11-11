@@ -99,8 +99,28 @@ class CheetahSimulator(torch.nn.Module):
                 )
             claimed_targets.update(overlay._rules)
             self.overlays[overlay.name] = overlay
+        overlay_states = {
+            overlay: (overlay._variables, overlay._targets, overlay._initial_variables)
+            for overlay in self.overlays.values()
+        }
+        original_targets = []
+        elements = self.segment.flattened().elements
         for overlay in self.overlays.values():
-            overlay._bind(self.segment)
+            for element_name, attribute in overlay._rules:
+                for element in elements:
+                    if element.name == element_name and hasattr(element, attribute):
+                        original_targets.append(
+                            (element, attribute, getattr(element, attribute))
+                        )
+        try:
+            for overlay in self.overlays.values():
+                overlay._bind(self.segment)
+        except Exception:
+            for element, attribute, value in original_targets:
+                setattr(element, attribute, value)
+            for overlay, state in overlay_states.items():
+                overlay._variables, overlay._targets, overlay._initial_variables = state
+            raise
 
         self.track()
         self.energies = self.get_energy()

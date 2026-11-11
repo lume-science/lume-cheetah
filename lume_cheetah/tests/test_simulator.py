@@ -207,6 +207,24 @@ def test_overlay_fans_out_voltage_and_phase_and_tracks():
     assert simulator.track().energy.item() == pytest.approx(1e6)
 
 
+def test_overlay_self_variable_can_be_updated():
+    overlay = CheetahOverlay(
+        "self_variable",
+        variables={"self": 1.0},
+        targets={("Q1", "k1"): lambda variables: variables["self"]},
+    )
+    simulator = CheetahSimulator(
+        segment=_make_segment(),
+        initial_beam_distribution=_make_beam(),
+        overlays=[overlay],
+    )
+
+    overlay.self = 2.0
+    assert simulator.segment.Q1.k1.item() == 2.0
+    overlay.set(self=3.0)
+    assert simulator.segment.Q1.k1.item() == 3.0
+
+
 def test_overlay_reset_restores_variables_and_rebinds_existing_reference():
     simulator, overlay, weights = _make_rf_overlay_simulator()
     old_cavity = simulator.segment.K21_1B
@@ -314,6 +332,39 @@ def test_overlay_rejects_missing_or_non_tensor_targets(target, message):
             initial_beam_distribution=_make_beam(),
             overlays=[overlay],
         )
+
+
+def test_failed_overlay_binding_rolls_back_prior_bindings():
+    segment = _make_segment()
+    initial_k1 = segment.Q1.k1
+    first_overlay = CheetahOverlay(
+        "first",
+        variables={"strength": 2.0},
+        targets={("Q1", "k1"): lambda variables: variables["strength"]},
+    )
+    later_overlay = CheetahOverlay(
+        "later",
+        variables={"strength": 2.0},
+        targets={("missing", "k1"): lambda variables: variables["strength"]},
+    )
+
+    with pytest.raises(ValueError, match="not found"):
+        CheetahSimulator(
+            segment=segment,
+            initial_beam_distribution=_make_beam(),
+            overlays=[first_overlay, later_overlay],
+        )
+
+    assert segment.Q1.k1 is initial_k1
+    assert first_overlay._initial_variables is None
+    assert first_overlay._targets == {}
+
+    simulator = CheetahSimulator(
+        segment=segment,
+        initial_beam_distribution=_make_beam(),
+        overlays=[first_overlay],
+    )
+    assert simulator.segment.Q1.k1.item() == 2.0
 
 
 @pytest.mark.parametrize("variable", ["name", "set", "variables", "_targets", "a-b"])
