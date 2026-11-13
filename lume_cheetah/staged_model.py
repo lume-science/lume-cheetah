@@ -162,6 +162,10 @@ class CheetahStagedModel(
 
     @property
     def cheetah_final_particles(self) -> ParticleBeam:
+        if not isinstance(self.lume_model_instances[-1], CheetahFinalParticlesMixIn):
+            raise AttributeError(
+                "Cannot access cheetah_final_particles because the last model does not implement CheetahFinalParticlesMixIn."
+            )
         if self._final_distribution is None:
             raise RuntimeError("final distribution is none")
         return self._final_distribution.clone()
