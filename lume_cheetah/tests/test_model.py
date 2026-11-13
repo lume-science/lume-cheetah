@@ -1,4 +1,5 @@
 from beamphysics import ParticleGroup
+from unittest.mock import patch
 
 from cheetah.accelerator import Segment, Quadrupole, Drift
 from cheetah.particles import ParticleBeam
@@ -91,3 +92,23 @@ class TestLUMECheetahModel:
         assert final_particles.n_particle == 1000
 
         # test roundtrip conversion
+
+    @pytest.mark.parametrize("particle_format", ["cheetah", "openpmd"])
+    def test_initial_particle_assignment_tracks_once(self, model, particle_format):
+        model.double()
+        beam = model.cheetah_initial_particles
+        beam.x = beam.x + 0.001
+        with patch.object(
+            model.simulator, "track", wraps=model.simulator.track
+        ) as track:
+            if particle_format == "cheetah":
+                model.cheetah_initial_particles = beam
+            else:
+                model.initial_particles = beam.to_openpmd_particlegroup()
+            track.assert_called_once_with()
+
+        torch.testing.assert_close(model.cheetah_initial_particles.x, beam.x)
+        expected = model.simulator.segment.track(model.simulator.beam_distribution)
+        torch.testing.assert_close(
+            model.cheetah_final_particles.particles, expected.particles
+        )

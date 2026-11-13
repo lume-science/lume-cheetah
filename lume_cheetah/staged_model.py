@@ -22,6 +22,10 @@ class CheetahInitialParticlesMixIn(ABC):
     @abstractmethod
     def cheetah_initial_particles(self, val: ParticleBeam): ...
 
+    def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
+        """Stage a beam before set(); override eager setters to defer tracking."""
+        self.cheetah_initial_particles = val
+
 
 class CheetahFinalParticlesMixIn(ABC):
     """
@@ -33,9 +37,11 @@ class CheetahFinalParticlesMixIn(ABC):
     def cheetah_final_particles(self) -> ParticleBeam: ...
 
 
-class CheetahStagedModel(StagedModel, CheetahInitialParticlesMixIn, CheetahFinalParticlesMixIn):
+class CheetahStagedModel(
+    StagedModel, CheetahInitialParticlesMixIn, CheetahFinalParticlesMixIn
+):
     """
-    Staged model that supports lume model instances that handle Cheetah initial and final 
+    Staged model that supports lume model instances that handle Cheetah initial and final
     particles such that it maintains differentiability
     """
 
@@ -53,7 +59,7 @@ class CheetahStagedModel(StagedModel, CheetahInitialParticlesMixIn, CheetahFinal
 
     @classmethod
     def validate_lume_model_instances(cls, models: list[LUMEModel]):
-        """ overwrite this method to validate LUMEModel instances for Cheetah support """
+        """overwrite this method to validate LUMEModel instances for Cheetah support"""
 
         # start by validating that all models are instances of LUMEModel
         super().validate_lume_model_instances(models)
@@ -72,17 +78,8 @@ class CheetahStagedModel(StagedModel, CheetahInitialParticlesMixIn, CheetahFinal
                 )
 
     def run_start_to_end(self):
-        incoming_particles = None
-        for i, model in enumerate(self.lume_model_instances):
-            if i > 0 and incoming_particles is not None:
-                model.cheetah_initial_particles = incoming_particles
-
-            model.set({})
-
-            if isinstance(model, CheetahFinalParticlesMixIn):
-                incoming_particles = model.cheetah_final_particles
-        
-        self._final_distribution = incoming_particles
+        """Track every stage once, combining beam handoff and evaluation."""
+        self._propagate({}, run_all=True)
 
     def _set(self, values: dict[str, Any]) -> None:
         """
@@ -93,23 +90,48 @@ class CheetahStagedModel(StagedModel, CheetahInitialParticlesMixIn, CheetahFinal
         values: dict[str, Any]
             Variable names and values to set across the staged models.
         """
-        self.coerce_evaluated_once()
+        self._propagate(values, run_all=not self._is_init)
+
+    def _propagate(self, values: dict[str, Any], *, run_all: bool) -> None:
+        """Pass beams through the stages, batching each handoff with its controls.
+
+        run_all forces a complete evaluation for initialization or explicit runs.
+        Otherwise, stages without incoming beams or changed controls reuse results.
+        """
+        # A failed pass must not leave the pipeline marked as fully evaluated.
+        self._is_init = False
         incoming_particles = None
         for i, model in enumerate(self.lume_model_instances):
+            # Route only this stage's controls through its public set() validation.
             model_values = {
                 k: v for k, v in values.items() if k in model.supported_variables
             }
 
-            if i > 0 and incoming_particles is not None:
-                model.cheetah_initial_particles = incoming_particles
+            # The first stage keeps its own input beam. Later stages receive the
+            # upstream result without triggering an eager evaluation at handoff.
+            has_incoming = i > 0 and incoming_particles is not None
+            if (
+                has_incoming
+                and incoming_particles is not None
+                and isinstance(model, CheetahInitialParticlesMixIn)
+            ):
+                model._set_cheetah_initial_particles(incoming_particles)
 
-            if model_values:
+            if run_all and isinstance(model, CheetahStagedModel):
+                # A full outer run must also refresh the first nested stage.
+                model._is_init = False
+            # Even unchanged controls need evaluation when the input beam arrives.
+            # Combining both updates here avoids tracking twice for the same stage.
+            if run_all or has_incoming or model_values:
                 model.set(model_values)
 
+            # Keep the Cheetah beam (and its autograd graph) for the next stage.
             if isinstance(model, CheetahFinalParticlesMixIn):
                 incoming_particles = model.cheetah_final_particles
-        
+
+        # Publish completion only after every required stage has succeeded.
         self._final_distribution = incoming_particles
+        self._is_init = True
 
     @property
     def cheetah_initial_particles(self) -> ParticleBeam:
@@ -128,6 +150,15 @@ class CheetahStagedModel(StagedModel, CheetahInitialParticlesMixIn, CheetahFinal
                 "Cannot set initial_particles because the first model does not implement CheetahInitialParticlesMixIn."
             )
         first_model.cheetah_initial_particles = val
+
+    def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
+        first_model = self.lume_model_instances[0]
+        if not isinstance(first_model, CheetahInitialParticlesMixIn):
+            raise AttributeError(
+                "Cannot set initial_particles because the first model does not implement CheetahInitialParticlesMixIn."
+            )
+        first_model._set_cheetah_initial_particles(val)
+        self._is_init = False
 
     @property
     def cheetah_final_particles(self) -> ParticleBeam:
@@ -148,4 +179,3 @@ class CheetahStagedModel(StagedModel, CheetahInitialParticlesMixIn, CheetahFinal
     @property
     def final_particles(self) -> ParticleGroup:
         return self.cheetah_final_particles.to_openpmd_particlegroup()
-

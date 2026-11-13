@@ -7,6 +7,7 @@ Consolidated test suite for CheetahStagedModel with:
 """
 
 from typing import Any
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -18,11 +19,15 @@ except ImportError:
     from pmd_beamphysics import ParticleGroup
 
 from cheetah.particles import ParticleBeam
+from cheetah.accelerator import Drift, Segment
 
 from lume.model import LUMEModel
 from lume.staged_model import InitialParticlesMixIn, FinalParticlesMixIn
 from lume.variables import ScalarVariable, Variable
 from lume_torch.variables import TorchScalarVariable
+from lume_cheetah.actions import CheetahWritableScalarVariable
+from lume_cheetah.model import LUMECheetahModel
+from lume_cheetah.simulator import CheetahSimulator
 
 from lume_cheetah.staged_model import (
     CheetahInitialParticlesMixIn,
@@ -495,6 +500,96 @@ class TestCheetahStagedModelExecution:
 
         # Should have been called once in run_start_to_end
         assert source.call_count_set == 1
+
+    @pytest.mark.parametrize("nested", ["none", "first", "last"])
+    @pytest.mark.parametrize(
+        "operation", ["run", "set_all", "set_first", "set_last", "set_empty"]
+    )
+    def test_real_stages_track_once_per_evaluation(
+        self, monkeypatch, nested, operation
+    ):
+        """Check evaluation counts, results, and gradients for flat/nested stages."""
+        beam = make_test_particle_beam().to(dtype=torch.float32)
+        beam.px = torch.full_like(beam.px, 0.01)  # Nonzero drift-length sensitivity.
+        stages = [
+            LUMECheetahModel(
+                CheetahSimulator(
+                    segment=Segment([Drift(name=f"D{i}", length=torch.tensor(0.5))]),
+                    initial_beam_distribution=beam,
+                ),
+                [
+                    CheetahWritableScalarVariable(
+                        name=f"length_{i}",  # Unique names route controls to each stage.
+                        element_name=f"D{i}",
+                        element_attribute="length",
+                    )
+                ],
+            )
+            for i in range(3)
+        ]
+        # Keep the physical lattice identical while varying its staged grouping.
+        if nested == "first":
+            model = CheetahStagedModel([CheetahStagedModel(stages[:2]), stages[2]])
+        elif nested == "last":
+            model = CheetahStagedModel([stages[0], CheetahStagedModel(stages[1:])])
+        else:
+            model = CheetahStagedModel(stages)
+        # Spy after construction: count requested evaluations, not simulator setup.
+        # wraps preserves real tracking, including its autograd graph.
+        tracks = []
+        for stage in stages:
+            track = Mock(wraps=stage.simulator.track)
+            monkeypatch.setattr(stage.simulator, "track", track)
+            tracks.append(track)
+
+        for iteration in range(2):  # Exercise initialization, then cached execution.
+            length = torch.tensor(
+                0.75 + iteration, dtype=beam.x.dtype, requires_grad=True
+            )
+            values = {
+                "run": {},
+                "set_all": {f"length_{i}": length for i in range(3)},
+                "set_first": {"length_0": length},
+                "set_last": {"length_2": length},
+                "set_empty": {},
+            }[operation]
+            if operation == "run":
+                model.run_start_to_end()
+            else:
+                model.set(values)
+
+            # The first stage runs on initialization, full runs, or its own updates.
+            first_runs = int(
+                iteration == 0 or operation in ("run", "set_all", "set_first")
+            )
+            # Beam recipients run once. A cached first nested group skips both leaves;
+            # otherwise the second leaf receives a beam and must run.
+            expected_calls = [first_runs, first_runs if nested == "first" else 1, 1]
+            assert [track.call_count for track in tracks] == expected_calls
+            # Reference tracking bypasses model handoffs and the simulator spies.
+            expected = beam
+            for stage in stages:
+                expected = stage.simulator.segment.track(expected)
+            torch.testing.assert_close(
+                model.cheetah_final_particles.particles, expected.particles
+            )
+            # Reading state must neither return stale controls nor retrigger initialization.
+            readbacks = model.get(["length_0", "length_1", "length_2"])
+            for name, value in values.items():
+                torch.testing.assert_close(readbacks[name], value)
+            assert [track.call_count for track in tracks] == expected_calls
+
+            if operation in ("set_all", "set_first"):
+                # For these drifts, dx/dlength = px. The shared input tensor contributes
+                # once per controlled drift, including the first stage in both cases.
+                model.cheetah_final_particles.x.sum().backward()
+                assert length.grad is not None
+                multiplier = 3 if operation == "set_all" else 1
+                torch.testing.assert_close(
+                    length.grad, (beam.px.sum() * multiplier).to(length)
+                )
+            for track in tracks:
+                track.reset_mock()  # Assert per-pass counts, not cumulative totals.
 
 
 class TestCheetahStagedModelProperties:

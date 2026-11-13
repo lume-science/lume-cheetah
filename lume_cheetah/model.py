@@ -54,6 +54,13 @@ class LUMECheetahModel(
 
         self.update_state()
 
+    def __setattr__(self, name, value):
+        if name == "cheetah_initial_particles":
+            # ParticleBeam is an nn.Module; honor the setter instead of registering it.
+            object.__setattr__(self, name, value)
+        else:
+            super().__setattr__(name, value)
+
     def _set(self, values: dict):
         """
         Internal method to set input variables and compute outputs.
@@ -102,6 +109,7 @@ class LUMECheetahModel(
         Reset the model to its initial state by resetting the simulator and updating the state.
         """
         self.simulator.reset()
+        self._final_distribution = None
         self.update_state()
 
     @property
@@ -110,9 +118,13 @@ class LUMECheetahModel(
 
     @cheetah_initial_particles.setter
     def cheetah_initial_particles(self, val: ParticleBeam):
+        self._set_cheetah_initial_particles(val)
+        self._final_distribution = self.simulator.track()
+        self.update_state()
+
+    def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
+        """Store a beam without tracking; staged execution follows with set()."""
         self.simulator.beam_distribution = val
-        # need to run tracking when updating initial particles
-        self.set({})
 
     @property
     def cheetah_final_particles(self) -> ParticleBeam:
