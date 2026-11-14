@@ -73,3 +73,9 @@ Direct assignment to `LUMECheetahModel.cheetah_initial_particles` or
 with eager particle setters can override
 `CheetahInitialParticlesMixIn._set_cheetah_initial_particles` to store the beam
 without tracking; staged execution follows this hook with `set()`.
+
+Assigning to a staged model's `cheetah_initial_particles` or `initial_particles`
+immediately evaluates the whole pipeline, including nested stages. Each
+`LUMECheetahModel` stage tracks once, and final particles are available when the
+assignment returns. Direct changes to child stages do not automatically run the
+containing pipeline; use its `set()` or `run_start_to_end()` to propagate those changes.

@@ -144,14 +144,12 @@ class CheetahStagedModel(
 
     @cheetah_initial_particles.setter
     def cheetah_initial_particles(self, val: ParticleBeam):
-        first_model = self.lume_model_instances[0]
-        if not isinstance(first_model, CheetahInitialParticlesMixIn):
-            raise AttributeError(
-                "Cannot set initial_particles because the first model does not implement CheetahInitialParticlesMixIn."
-            )
-        first_model.cheetah_initial_particles = val
+        """Assign a new input beam and immediately evaluate the whole pipeline."""
+        self._set_cheetah_initial_particles(val)
+        self.run_start_to_end()
 
     def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
+        """Defer evaluation during handoff so nested stages do not track twice."""
         first_model = self.lume_model_instances[0]
         if not isinstance(first_model, CheetahInitialParticlesMixIn):
             raise AttributeError(
@@ -159,6 +157,7 @@ class CheetahStagedModel(
             )
         first_model._set_cheetah_initial_particles(val)
         self._is_init = False
+        self._final_distribution = None
 
     @property
     def cheetah_final_particles(self) -> ParticleBeam:

@@ -503,7 +503,7 @@ class TestCheetahStagedModelExecution:
 
     @pytest.mark.parametrize("nested", ["none", "first", "last"])
     @pytest.mark.parametrize(
-        "operation", ["run", "set_all", "set_first", "set_last", "set_empty"]
+        "operation", ["run", "set_all", "set_first", "set_last", "set_empty", "assign"]
     )
     def test_real_stages_track_once_per_evaluation(
         self, monkeypatch, nested, operation
@@ -552,15 +552,24 @@ class TestCheetahStagedModelExecution:
                 "set_first": {"length_0": length},
                 "set_last": {"length_2": length},
                 "set_empty": {},
+                "assign": {},
             }[operation]
             if operation == "run":
                 model.run_start_to_end()
+            elif operation == "assign":
+                beam = beam.clone()
+                # Each assignment starts a fresh input graph after the prior backward.
+                beam.particles = beam.particles.detach()
+                initial_x = (beam.x + 0.001).requires_grad_(True)
+                beam.x = initial_x
+                model.cheetah_initial_particles = beam
             else:
                 model.set(values)
 
-            # The first stage runs on initialization, full runs, or its own updates.
+            # New beams, initialization, full runs, and first-stage updates all
+            # require evaluation of the first stage.
             first_runs = int(
-                iteration == 0 or operation in ("run", "set_all", "set_first")
+                iteration == 0 or operation in ("run", "set_all", "set_first", "assign")
             )
             # Beam recipients run once. A cached first nested group skips both leaves;
             # otherwise the second leaf receives a beam and must run.
@@ -588,12 +597,59 @@ class TestCheetahStagedModelExecution:
                 torch.testing.assert_close(
                     length.grad, (beam.px.sum() * multiplier).to(length)
                 )
+            elif operation == "assign":
+                model.cheetah_final_particles.x.sum().backward()
+                assert initial_x.grad is not None
+                torch.testing.assert_close(initial_x.grad, torch.ones_like(initial_x))
             for track in tracks:
                 track.reset_mock()  # Assert per-pass counts, not cumulative totals.
 
 
 class TestCheetahStagedModelProperties:
     """Test property getters and setters."""
+
+    @pytest.mark.parametrize("particle_format", ["cheetah", "openpmd"])
+    def test_new_input_evaluates_nested_pipeline(self, particle_format):
+        first_group = CheetahStagedModel([SourceModel(), ProcessModel()])
+        model = CheetahStagedModel([first_group, DampingModel()])
+        model.set({"scale": 2.0})
+        assert model._is_init and first_group._is_init
+
+        new_beam = make_test_particle_beam(n_particles=16, x_offset=0.003)
+        if particle_format == "cheetah":
+            model.cheetah_initial_particles = new_beam
+        else:
+            model.initial_particles = new_beam.to_openpmd_particlegroup()
+
+        assert model._is_init and first_group._is_init
+        torch.testing.assert_close(
+            first_group.cheetah_final_particles.x, new_beam.x * 2.0
+        )
+        torch.testing.assert_close(
+            model.cheetah_final_particles.x, new_beam.x * 2.0 * 0.9
+        )
+
+        # A later downstream-only update must reuse the newly evaluated input.
+        model.set({"damping": 0.25})
+        torch.testing.assert_close(
+            model.cheetah_final_particles.x, new_beam.x * 2.0 * 0.75
+        )
+        assert model._is_init and first_group._is_init
+
+    def test_new_input_tracking_failure_invalidates_output(self, monkeypatch):
+        process = ProcessModel()
+        model = CheetahStagedModel([SourceModel(), process])
+        model.run_start_to_end()
+        monkeypatch.setattr(
+            process, "set", Mock(side_effect=RuntimeError("tracking failed"))
+        )
+
+        with pytest.raises(RuntimeError, match="tracking failed"):
+            model.cheetah_initial_particles = make_test_particle_beam(x_offset=0.003)
+
+        assert not model._is_init
+        with pytest.raises(RuntimeError, match="final distribution is none"):
+            _ = model.cheetah_final_particles
 
     def test_cheetah_initial_particles_getter_and_setter(self):
         """Test initial particles property."""
