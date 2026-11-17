@@ -1,4 +1,3 @@
-from beamphysics import ParticleGroup
 from lume.actions import ActionModel
 from lume.variables import Variable
 from lume_cheetah.staged_model import (

@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 from typing import Any
 
 from beamphysics import ParticleGroup
@@ -26,7 +25,9 @@ class CheetahInitialParticlesMixIn(InitialParticlesMixIn):
     @cheetah_initial_particles.setter
     def cheetah_initial_particles(self, val: ParticleBeam):
         """Must be overridden by subclasses."""
-        raise NotImplementedError("Subclasses must implement cheetah_initial_particles setter")
+        raise NotImplementedError(
+            "Subclasses must implement cheetah_initial_particles setter"
+        )
 
     def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
         """Stage a beam before set(); override eager setters to defer tracking."""

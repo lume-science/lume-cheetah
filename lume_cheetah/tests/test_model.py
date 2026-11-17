@@ -91,7 +91,6 @@ class TestLUMECheetahModel:
         assert isinstance(final_particles, ParticleGroup)
         assert final_particles.n_particle == 1000
 
-
     @pytest.mark.parametrize("particle_format", ["cheetah", "openpmd"])
     def test_initial_particle_assignment_tracks_once(self, model, particle_format):
         model.double()

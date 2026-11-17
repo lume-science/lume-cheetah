@@ -19,7 +19,7 @@ except ImportError:
     from pmd_beamphysics import ParticleGroup
 
 from cheetah.particles import ParticleBeam
-from cheetah.accelerator import Drift, Segment, Quadrupole
+from cheetah.accelerator import Drift, Segment
 
 from lume.model import LUMEModel
 from lume.variables import ScalarVariable, Variable
@@ -317,9 +317,7 @@ class TestCheetahStagedModelValidation:
     def test_validation_rejects_missing_initial_particles_mixin(self):
         """Test that models missing InitialParticlesMixIn are rejected in non-first positions."""
 
-        class NoInitialModel(
-            LUMEModel, CheetahFinalParticlesMixIn
-        ):
+        class NoInitialModel(LUMEModel, CheetahFinalParticlesMixIn):
             @property
             def supported_variables(self) -> dict[str, Variable]:
                 return {}
