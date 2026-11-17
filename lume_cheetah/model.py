@@ -45,7 +45,7 @@ class LUMECheetahModel(
         torch.nn.Module.__init__(self)
 
         # create builtin actions
-        action_variables.extend(create_builtin_actions(simulator))
+        action_variables = [*action_variables, *create_builtin_actions(simulator)]
 
         super().__init__(simulator, action_variables)
 
