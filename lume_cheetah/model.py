@@ -11,6 +11,7 @@ from cheetah.particles import ParticleBeam
 import torch
 from lume_cheetah.actions import create_builtin_actions
 
+
 class LUMECheetahModel(
     ActionModel,
     torch.nn.Module,

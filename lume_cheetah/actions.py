@@ -117,6 +117,7 @@ class CheetahBeamPropertyVariable(
         read_beam = self._get_read_beam(simulator)
         return getattr(read_beam, self.beam_property)
 
+
 # TODO: add support for arbitrary naming of beam property variables
 def create_builtin_actions(simulator: CheetahSimulator):
     """Create built-in actions for a Cheetah simulator."""
