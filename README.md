@@ -61,6 +61,12 @@ model.update_state()
 model.reset()
 ```
 
+`LUMECheetahModel` automatically registers read-only outputs for each screen in
+the simulator segment: `beam:<screen_name>` returns an OpenPMD `ParticleGroup`,
+and `beam:<screen_name>_<property>` returns a tensor for `mu_x`, `mu_y`, `sigma_x`,
+`sigma_y`, or `sigma_tau`. Screens must be active (`is_active=True`) to record
+beams. These outputs refresh when the model tracks or resets.
+
 ## Implementing classes for `CheetahStagedModel`
 
 `LUMECheetahModel` already supports staging. For custom stages:

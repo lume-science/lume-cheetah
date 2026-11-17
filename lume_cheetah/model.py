@@ -9,7 +9,7 @@ from lume_cheetah.simulator import CheetahSimulator
 from cheetah.particles import ParticleBeam
 
 import torch
-
+from lume_cheetah.actions import create_builtin_actions
 
 class LUMECheetahModel(
     ActionModel,
@@ -43,6 +43,10 @@ class LUMECheetahModel(
             A list of Variable instances representing the action variables.
         """
         torch.nn.Module.__init__(self)
+
+        # create builtin actions
+        action_variables.extend(create_builtin_actions(simulator))
+
         super().__init__(simulator, action_variables)
 
         self._state = {}
