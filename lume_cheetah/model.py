@@ -1,7 +1,6 @@
 from beamphysics import ParticleGroup
 from lume.actions import ActionModel
 from lume.variables import Variable
-from lume.staged_model import InitialParticlesMixIn, FinalParticlesMixIn
 from lume_cheetah.staged_model import (
     CheetahInitialParticlesMixIn,
     CheetahFinalParticlesMixIn,
@@ -16,8 +15,6 @@ import torch
 class LUMECheetahModel(
     ActionModel,
     torch.nn.Module,
-    InitialParticlesMixIn,
-    FinalParticlesMixIn,
     CheetahInitialParticlesMixIn,
     CheetahFinalParticlesMixIn,
 ):
@@ -56,8 +53,8 @@ class LUMECheetahModel(
 
     def __setattr__(self, name, value):
         if name == "cheetah_initial_particles":
-            # ParticleBeam is an nn.Module; honor the setter instead of registering it.
-            object.__setattr__(self, name, value)
+            # Invoke the property setter directly to bypass torch.nn.Module's __setattr__
+            type(self).cheetah_initial_particles.fset(self, value)
         else:
             super().__setattr__(name, value)
 
@@ -131,17 +128,3 @@ class LUMECheetahModel(
         if self._final_distribution is None:
             raise RuntimeError("final distribution is none")
         return self._final_distribution.clone()
-
-    @property
-    def initial_particles(self) -> ParticleGroup:
-        return self.cheetah_initial_particles.to_openpmd_particlegroup()
-
-    @initial_particles.setter
-    def initial_particles(self, particles: ParticleGroup):
-        self.cheetah_initial_particles = ParticleBeam.from_openpmd_particlegroup(
-            particles, energy=torch.tensor(particles.energy.mean())
-        )
-
-    @property
-    def final_particles(self) -> ParticleGroup:
-        return self.cheetah_final_particles.to_openpmd_particlegroup()

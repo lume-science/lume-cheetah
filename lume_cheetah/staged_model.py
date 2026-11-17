@@ -4,37 +4,66 @@ from typing import Any
 from beamphysics import ParticleGroup
 import torch
 
-from lume.staged_model import StagedModel
+from lume.staged_model import StagedModel, InitialParticlesMixIn, FinalParticlesMixIn
 from lume.model import LUMEModel
 from cheetah.particles import ParticleBeam
 
 
-class CheetahInitialParticlesMixIn(ABC):
+class CheetahInitialParticlesMixIn(InitialParticlesMixIn):
     """
     Mix in to LUMEModel to indicate support for Cheetah initial particles.
+
+    Provides convenience methods for converting between Cheetah ParticleBeam and
+    OpenPMD ParticleGroup formats. Subclasses must implement the
+    cheetah_initial_particles property with both getter and setter.
     """
 
     @property
-    @abstractmethod
-    def cheetah_initial_particles(self) -> ParticleBeam: ...
+    def cheetah_initial_particles(self) -> ParticleBeam:
+        """Must be overridden by subclasses."""
+        raise NotImplementedError("Subclasses must implement cheetah_initial_particles")
 
     @cheetah_initial_particles.setter
-    @abstractmethod
-    def cheetah_initial_particles(self, val: ParticleBeam): ...
+    def cheetah_initial_particles(self, val: ParticleBeam):
+        """Must be overridden by subclasses."""
+        raise NotImplementedError("Subclasses must implement cheetah_initial_particles setter")
 
     def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
         """Stage a beam before set(); override eager setters to defer tracking."""
         self.cheetah_initial_particles = val
 
+    @property
+    def initial_particles(self) -> ParticleGroup:
+        """Convert Cheetah beam to OpenPMD ParticleGroup for compatibility."""
+        return self.cheetah_initial_particles.to_openpmd_particlegroup()
 
-class CheetahFinalParticlesMixIn(ABC):
+    @initial_particles.setter
+    def initial_particles(self, val: ParticleGroup) -> None:
+        """Convert OpenPMD ParticleGroup to Cheetah beam and assign."""
+        energy = torch.tensor(val.energy.mean())
+        self.cheetah_initial_particles = ParticleBeam.from_openpmd_particlegroup(
+            val, energy=energy
+        )
+
+
+class CheetahFinalParticlesMixIn(FinalParticlesMixIn):
     """
     Mix in to LUMEModel to indicate support for Cheetah final particles.
+
+    Provides convenience methods for converting between Cheetah ParticleBeam and
+    OpenPMD ParticleGroup formats. Subclasses must implement the
+    cheetah_final_particles property with a getter.
     """
 
     @property
-    @abstractmethod
-    def cheetah_final_particles(self) -> ParticleBeam: ...
+    def cheetah_final_particles(self) -> ParticleBeam:
+        """Must be overridden by subclasses."""
+        raise NotImplementedError("Subclasses must implement cheetah_final_particles")
+
+    @property
+    def final_particles(self) -> ParticleGroup:
+        """Convert Cheetah beam to OpenPMD ParticleGroup for compatibility."""
+        return self.cheetah_final_particles.to_openpmd_particlegroup()
 
 
 class CheetahStagedModel(
@@ -175,6 +204,11 @@ class CheetahStagedModel(
 
     @initial_particles.setter
     def initial_particles(self, particles: ParticleGroup):
+        """
+        Set initial particles and immediately evaluate the whole pipeline.
+
+        NOTE: start to end tracking is triggered when setting cheetah_initial_particles.
+        """
         self.cheetah_initial_particles = ParticleBeam.from_openpmd_particlegroup(
             particles, energy=torch.tensor(particles.energy.mean())
         )

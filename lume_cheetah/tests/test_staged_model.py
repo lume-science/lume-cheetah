@@ -19,10 +19,9 @@ except ImportError:
     from pmd_beamphysics import ParticleGroup
 
 from cheetah.particles import ParticleBeam
-from cheetah.accelerator import Drift, Segment
+from cheetah.accelerator import Drift, Segment, Quadrupole
 
 from lume.model import LUMEModel
-from lume.staged_model import InitialParticlesMixIn, FinalParticlesMixIn
 from lume.variables import ScalarVariable, Variable
 from lume_torch.variables import TorchScalarVariable
 from lume_cheetah.actions import CheetahWritableScalarVariable
@@ -72,8 +71,6 @@ def make_test_particle_beam(
 
 class SourceModel(
     LUMEModel,
-    InitialParticlesMixIn,
-    FinalParticlesMixIn,
     CheetahInitialParticlesMixIn,
     CheetahFinalParticlesMixIn,
 ):
@@ -110,21 +107,6 @@ class SourceModel(
         beam.x = beam.x + self._state["phase"]
         return beam
 
-    @property
-    def initial_particles(self) -> ParticleGroup:
-        return self.cheetah_initial_particles.to_openpmd_particlegroup()
-
-    @initial_particles.setter
-    def initial_particles(self, val: ParticleGroup) -> None:
-        energy = torch.tensor(val.energy.mean())
-        self.cheetah_initial_particles = ParticleBeam.from_openpmd_particlegroup(
-            val, energy=energy
-        )
-
-    @property
-    def final_particles(self) -> ParticleGroup:
-        return self.cheetah_final_particles.to_openpmd_particlegroup()
-
     def set(self, values: dict[str, Any]) -> None:
         self.call_count_set += 1
         super().set(values)
@@ -142,8 +124,6 @@ class SourceModel(
 
 class ProcessModel(
     LUMEModel,
-    InitialParticlesMixIn,
-    FinalParticlesMixIn,
     CheetahInitialParticlesMixIn,
     CheetahFinalParticlesMixIn,
 ):
@@ -180,21 +160,6 @@ class ProcessModel(
         beam.x = beam.x * scale
         return beam
 
-    @property
-    def initial_particles(self) -> ParticleGroup:
-        return self.cheetah_initial_particles.to_openpmd_particlegroup()
-
-    @initial_particles.setter
-    def initial_particles(self, val: ParticleGroup) -> None:
-        energy = torch.tensor(val.energy.mean())
-        self.cheetah_initial_particles = ParticleBeam.from_openpmd_particlegroup(
-            val, energy=energy
-        )
-
-    @property
-    def final_particles(self) -> ParticleGroup:
-        return self.cheetah_final_particles.to_openpmd_particlegroup()
-
     def set(self, values: dict[str, Any]) -> None:
         self.call_count_set += 1
         super().set(values)
@@ -212,8 +177,6 @@ class ProcessModel(
 
 class DampingModel(
     LUMEModel,
-    InitialParticlesMixIn,
-    FinalParticlesMixIn,
     CheetahInitialParticlesMixIn,
     CheetahFinalParticlesMixIn,
 ):
@@ -355,15 +318,11 @@ class TestCheetahStagedModelValidation:
         """Test that models missing InitialParticlesMixIn are rejected in non-first positions."""
 
         class NoInitialModel(
-            LUMEModel, FinalParticlesMixIn, CheetahFinalParticlesMixIn
+            LUMEModel, CheetahFinalParticlesMixIn
         ):
             @property
             def supported_variables(self) -> dict[str, Variable]:
                 return {}
-
-            @property
-            def final_particles(self) -> ParticleGroup:
-                return self.cheetah_final_particles.to_openpmd_particlegroup()
 
             @property
             def cheetah_final_particles(self) -> ParticleBeam:
@@ -388,8 +347,6 @@ class TestCheetahStagedModelValidation:
 
         class Model1(
             LUMEModel,
-            InitialParticlesMixIn,
-            FinalParticlesMixIn,
             CheetahInitialParticlesMixIn,
             CheetahFinalParticlesMixIn,
         ):

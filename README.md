@@ -61,7 +61,27 @@ model.update_state()
 model.reset()
 ```
 
-## Implementation notes
+## Implementing classes for `CheetahStagedModel`
+
+`LUMECheetahModel` already supports staging. For custom stages:
+
+- Inherit from `LUMEModel` and implement `supported_variables`, `_get()`, `_set()`,
+  and `reset()`. Use unique variable names across stages.
+- Receivers need `CheetahInitialParticlesMixIn`; providers need
+  `CheetahFinalParticlesMixIn`. These mixins inherit from their LUME counterparts
+  (`InitialParticlesMixIn` and `FinalParticlesMixIn`), so you only need to inherit
+  from the Cheetah mixins. Implement both to support any position and both pipeline
+  endpoints.
+- Expose Cheetah beams through `cheetah_initial_particles` and
+  `cheetah_final_particles`; use `_set_cheetah_initial_particles(beam)` to store
+  inputs without evaluating when the public setter is eager.
+- Keep differentiable controls and calculations in PyTorch; use
+  `TorchScalarVariable`/`TorchNDVariable` for tensor controls. Do not detach or
+  convert beams to NumPy/OpenPMD between stages.
+
+See [LUMECheetahModel](lume_cheetah/model.py) for a complete implementation.
+
+### Implementation notes
 Staged execution batches each incoming beam with its stage's control updates
 before tracking. Full runs track each `LUMECheetahModel` once, including nested
 stages; the first `set()` initializes the pipeline in that same pass. Subsequent
