@@ -5,6 +5,7 @@ Cheetah-specific implementation of LUMEModel classes for virtual accelerators
 
 - `CheetahSimulator`: wraps a Cheetah accelerator `Segment` and initial beam distribution.
 - `LUMECheetahModel`: a LUME action model driven by simulator-backed variables.
+- `CheetahStagedModel`: passes Cheetah beams between stages while preserving autograd.
 
 ## Example: implementing a `LUMECheetahModel` object
 
@@ -59,3 +60,42 @@ model.update_state()
 # Optional: reset simulator + model state to initial conditions
 model.reset()
 ```
+
+## Implementing classes for `CheetahStagedModel`
+
+`LUMECheetahModel` already supports staging. For custom stages:
+
+- Inherit from `LUMEModel` and implement `supported_variables`, `_get()`, `_set()`,
+  and `reset()`. Use unique variable names across stages.
+- Receivers need `CheetahInitialParticlesMixIn`; providers need
+  `CheetahFinalParticlesMixIn`. These mixins inherit from their LUME counterparts
+  (`InitialParticlesMixIn` and `FinalParticlesMixIn`), so you only need to inherit
+  from the Cheetah mixins. Implement both to support any position and both pipeline
+  endpoints.
+- Expose Cheetah beams through `cheetah_initial_particles` and
+  `cheetah_final_particles`; use `_set_cheetah_initial_particles(beam)` to store
+  inputs without evaluating when the public setter is eager.
+- Keep differentiable controls and calculations in PyTorch; use
+  `TorchScalarVariable`/`TorchNDVariable` for tensor controls. Do not detach or
+  convert beams to NumPy/OpenPMD between stages.
+
+See [LUMECheetahModel](lume_cheetah/model.py) for a complete implementation.
+
+### Implementation notes
+Staged execution batches each incoming beam with its stage's control updates
+before tracking. Full runs track each `LUMECheetahModel` once, including nested
+stages; the first `set()` initializes the pipeline in that same pass. Subsequent
+partial updates retain cached upstream results and evaluate stages receiving
+beams even when their controls have not changed.
+
+Direct assignment to `LUMECheetahModel.cheetah_initial_particles` or
+`initial_particles` still tracks immediately and refreshes state. Custom stages
+with eager particle setters can override
+`CheetahInitialParticlesMixIn._set_cheetah_initial_particles` to store the beam
+without tracking; staged execution follows this hook with `set()`.
+
+Assigning to a staged model's `cheetah_initial_particles` or `initial_particles`
+immediately evaluates the whole pipeline, including nested stages. Each
+`LUMECheetahModel` stage tracks once, and final particles are available when the
+assignment returns. Direct changes to child stages do not automatically run the
+containing pipeline; use its `set()` or `run_start_to_end()` to propagate those changes.

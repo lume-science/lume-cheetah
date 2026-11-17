@@ -1,7 +1,9 @@
-from beamphysics import ParticleGroup
 from lume.actions import ActionModel
 from lume.variables import Variable
-from lume.staged_model import InitialParticlesMixIn, FinalParticlesMixIn
+from lume_cheetah.staged_model import (
+    CheetahInitialParticlesMixIn,
+    CheetahFinalParticlesMixIn,
+)
 from lume_cheetah.simulator import CheetahSimulator
 
 from cheetah.particles import ParticleBeam
@@ -10,7 +12,10 @@ import torch
 
 
 class LUMECheetahModel(
-    ActionModel, torch.nn.Module, InitialParticlesMixIn, FinalParticlesMixIn
+    ActionModel,
+    torch.nn.Module,
+    CheetahInitialParticlesMixIn,
+    CheetahFinalParticlesMixIn,
 ):
     """
     LumeModel subclass for wrapping Cheetah Simulations
@@ -44,6 +49,13 @@ class LUMECheetahModel(
         self._final_distribution: ParticleBeam | None = None
 
         self.update_state()
+
+    def __setattr__(self, name, value):
+        if name == "cheetah_initial_particles":
+            # Invoke the property setter directly to bypass torch.nn.Module's __setattr__
+            type(self).cheetah_initial_particles.fset(self, value)
+        else:
+            super().__setattr__(name, value)
 
     def _set(self, values: dict):
         """
@@ -93,22 +105,25 @@ class LUMECheetahModel(
         Reset the model to its initial state by resetting the simulator and updating the state.
         """
         self.simulator.reset()
+        self._final_distribution = None
         self.update_state()
 
     @property
-    def initial_particles(self) -> ParticleGroup:
-        return self.simulator.beam_distribution.clone().to_openpmd_particlegroup()
+    def cheetah_initial_particles(self) -> ParticleBeam:
+        return self.simulator.beam_distribution.clone()
 
-    @initial_particles.setter
-    def initial_particles(self, particles: ParticleGroup):
-        self.simulator.beam_distribution = ParticleBeam.from_openpmd_particlegroup(
-            particles, energy=torch.tensor(particles.energy.mean())
-        )
-        # need to run tracking when updating initial particles
-        self.set({})
+    @cheetah_initial_particles.setter
+    def cheetah_initial_particles(self, val: ParticleBeam):
+        self._set_cheetah_initial_particles(val)
+        self._final_distribution = self.simulator.track()
+        self.update_state()
+
+    def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
+        """Store a beam without tracking; staged execution follows with set()."""
+        self.simulator.beam_distribution = val
 
     @property
-    def final_particles(self) -> ParticleGroup:
+    def cheetah_final_particles(self) -> ParticleBeam:
         if self._final_distribution is None:
             raise RuntimeError("final distribution is none")
-        return self._final_distribution.clone().to_openpmd_particlegroup()
+        return self._final_distribution.clone()
