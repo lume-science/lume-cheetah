@@ -128,8 +128,10 @@ class CheetahStagedModel(
         run_all forces a complete evaluation for initialization or explicit runs.
         Otherwise, stages without incoming beams or changed controls reuse results.
         """
-        # A failed pass must not leave the pipeline marked as fully evaluated.
+        # A failed pass must not leave the pipeline marked as fully evaluated,
+        # or expose stale cached results. Clear both before attempting propagation.
         self._is_init = False
+        self._final_distribution = None
         incoming_particles = None
         for i, model in enumerate(self.lume_model_instances):
             # Route only this stage's controls through its public set() validation.
