@@ -125,7 +125,7 @@ def create_builtin_actions(simulator: CheetahSimulator):
 
     for ele in segment.elements:
         # for each screen element in the segment create beam property variables
-        if isinstance(ele, Screen):
+        if isinstance(ele, Screen) and ele.is_active:
             actions.append(
                 CheetahBeamVariable(name=f"beam:{ele.name}", element_name=ele.name)
             )
