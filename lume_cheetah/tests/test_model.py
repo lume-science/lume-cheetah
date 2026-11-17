@@ -69,24 +69,24 @@ class TestLUMECheetahModel:
     )
     def test_builtin_screen_outputs(self, screen_model, operation):
         model = screen_model
-        initial_sigma_x = model.get_value("beam:S1_sigma_x").clone()
+        initial_sigma_x = model.get_value("beam:S1:sigma_x").clone()
         if operation in ("set", "reset"):
             model.set({"Q1_k": torch.tensor(2.0)})
-            assert not torch.equal(model.get_value("beam:S1_sigma_x"), initial_sigma_x)
+            assert not torch.equal(model.get_value("beam:S1:sigma_x"), initial_sigma_x)
         if operation == "reset":
             model.reset()
             torch.testing.assert_close(
-                model.get_value("beam:S1_sigma_x"), initial_sigma_x
+                model.get_value("beam:S1:sigma_x"), initial_sigma_x
             )
         elif operation == "initial_particles":
-            initial_mu_x = model.get_value("beam:S1_mu_x").clone()
+            initial_mu_x = model.get_value("beam:S1:mu_x").clone()
             beam = model.cheetah_initial_particles
             beam.x = beam.x + 0.001
             model.cheetah_initial_particles = beam
-            assert not torch.equal(model.get_value("beam:S1_mu_x"), initial_mu_x)
+            assert not torch.equal(model.get_value("beam:S1:mu_x"), initial_mu_x)
 
         properties = ("mu_x", "mu_y", "sigma_x", "sigma_y", "sigma_tau")
-        names = ["beam:S1", *(f"beam:S1_{prop}" for prop in properties)]
+        names = ["beam:S1", *(f"beam:S1:{prop}" for prop in properties)]
         assert set(model.supported_variables) == {"Q1_k", "Q1_k_readback", *names}
         values = model.get(names)
         read_beam = model.simulator.segment.S1.get_read_beam()
@@ -95,18 +95,18 @@ class TestLUMECheetahModel:
         assert values["beam:S1"] == read_beam.to_openpmd_particlegroup()
         for prop in properties:
             torch.testing.assert_close(
-                values[f"beam:S1_{prop}"], getattr(read_beam, prop)
+                values[f"beam:S1:{prop}"], getattr(read_beam, prop)
             )
 
     @pytest.mark.parametrize(
         "name",
         [
             "beam:S1",
-            "beam:S1_mu_x",
-            "beam:S1_mu_y",
-            "beam:S1_sigma_x",
-            "beam:S1_sigma_y",
-            "beam:S1_sigma_tau",
+            "beam:S1:mu_x",
+            "beam:S1:mu_y",
+            "beam:S1:sigma_x",
+            "beam:S1:sigma_y",
+            "beam:S1:sigma_tau",
         ],
     )
     def test_builtin_screen_outputs_are_read_only(self, screen_model, name):

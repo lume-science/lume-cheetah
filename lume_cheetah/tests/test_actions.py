@@ -41,7 +41,7 @@ def test_create_builtin_actions(screen_names):
         for screen_name in screen_names
         for name in (
             f"beam:{screen_name}",
-            *(f"beam:{screen_name}_{prop}" for prop in properties),
+            *(f"beam:{screen_name}:{prop}" for prop in properties),
         )
     }
     assert len(actions) == len(expected_names)
@@ -60,7 +60,7 @@ def test_create_builtin_actions(screen_names):
         assert particles == read_beam.to_openpmd_particlegroup()
 
         for prop in properties:
-            action = by_name[f"beam:{screen.name}_{prop}"]
+            action = by_name[f"beam:{screen.name}:{prop}"]
             assert isinstance(action, CheetahBeamPropertyVariable)
             assert isinstance(action, ReadOnlyActionMixin)
             assert action.read_only
