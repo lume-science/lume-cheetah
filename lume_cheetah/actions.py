@@ -1,3 +1,5 @@
+from lume.variables.particle_group import ParticleGroupVariable
+
 from lume.actions import WritableActionMixin, ReadOnlyActionMixin
 from lume_torch.variables import TorchScalarVariable, TorchNDVariable
 from lume.variables import EnumVariable
@@ -92,13 +94,49 @@ class CheetahReadOnlyEnumVariable(EnumVariable, CheetahReadOnlyActionMixin):
     """Read-only enum variable for Cheetah-backed PVs."""
 
 
+class CheetahBeamVariable(
+    ParticleGroupVariable, _CheetahBeamAccessMixin, ReadOnlyActionMixin
+):
+    """Read only beam variable for openpmd beam distributions"""
+
+    read_only: bool = True
+
+    def _get(self, simulator):
+        return self._get_read_beam(simulator).to_openpmd_particlegroup()
+
+
 class CheetahBeamPropertyVariable(
     TorchScalarVariable, _CheetahBeamAccessMixin, ReadOnlyActionMixin
 ):
     """Read-only beam property variable for Cheetah-backed PVs."""
 
+    read_only: bool = True
     beam_property: str
 
     def _get(self, simulator):
         read_beam = self._get_read_beam(simulator)
         return getattr(read_beam, self.beam_property)
+
+
+# TODO: add support for arbitrary naming of beam property variables
+def create_builtin_actions(simulator: CheetahSimulator):
+    """Create built-in actions for a Cheetah simulator."""
+    segment = simulator.segment
+    actions = []
+
+    for ele in segment.elements:
+        # for each screen element in the segment create beam property variables
+        if isinstance(ele, Screen) and ele.is_active:
+            actions.append(
+                CheetahBeamVariable(name=f"beam:{ele.name}", element_name=ele.name)
+            )
+            for prop in ["mu_x", "mu_y", "sigma_x", "sigma_y", "sigma_tau"]:
+                actions.append(
+                    CheetahBeamPropertyVariable(
+                        name=f"beam:{ele.name}:{prop}",
+                        element_name=ele.name,
+                        beam_property=prop,
+                    )
+                )
+
+    return actions
