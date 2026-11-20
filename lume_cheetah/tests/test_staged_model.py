@@ -709,6 +709,65 @@ class TestCheetahStagedModelVariables:
 class TestGradientPropagation:
     """Verify backward reaches first-stage inputs across stage boundaries."""
 
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_registered_stages_optimize_move_and_restore(self, nested):
+        class TrainableSource(SourceModel, torch.nn.Module):
+            def __init__(self):
+                torch.nn.Module.__init__(self)
+                super().__init__()
+                self.offset = torch.nn.Parameter(torch.tensor(0.01))
+
+            @property
+            def cheetah_final_particles(self):
+                beam = super().cheetah_final_particles
+                beam.x = beam.x + self.offset
+                return beam
+
+        class TrainableProcess(ProcessModel, torch.nn.Module):
+            def __init__(self):
+                torch.nn.Module.__init__(self)
+                super().__init__()
+                self.gain = torch.nn.Parameter(torch.tensor(1.2))
+
+            def _set_cheetah_initial_particles(self, val: ParticleBeam) -> None:
+                self._cheetah_initial_particles = val
+
+            @property
+            def cheetah_final_particles(self):
+                beam = super().cheetah_final_particles
+                beam.x = beam.x.clone() * self.gain
+                return beam
+
+        source, process = TrainableSource(), TrainableProcess()
+        model = CheetahStagedModel([source, process])
+        if nested:
+            model = CheetahStagedModel([model, DampingModel()])
+        model.to(dtype=torch.float64).eval()
+        assert source.offset.dtype == process.gain.dtype == torch.float64
+        assert not source.training and not process.training
+        assert {id(p) for p in model.parameters()} == {
+            id(source.offset),
+            id(process.gain),
+        }
+
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        model.run_start_to_end()
+        expected = model.cheetah_final_particles.x.detach().clone()
+        saved = {
+            name: value.detach().clone() for name, value in model.state_dict().items()
+        }
+        parameter_names = dict(model.named_parameters())
+        assert set(parameter_names).issubset(saved)
+        model.cheetah_final_particles.x.sum().backward()
+        optimizer.step()
+        for name, parameter in parameter_names.items():
+            assert parameter.grad is not None and parameter.grad != 0
+            assert parameter != saved[name]
+
+        model.load_state_dict(saved)
+        model.run_start_to_end()
+        torch.testing.assert_close(model.cheetah_final_particles.x, expected)
+
     @pytest.mark.parametrize("n_stages", [2, 3])
     @pytest.mark.parametrize("execution", ["set", "run_start_to_end"])
     def test_backward_to_first_stage_inputs(self, n_stages, execution):

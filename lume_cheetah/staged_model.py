@@ -68,11 +68,19 @@ class CheetahFinalParticlesMixIn(FinalParticlesMixIn):
 
 
 class CheetahStagedModel(
-    StagedModel, CheetahInitialParticlesMixIn, CheetahFinalParticlesMixIn
+    StagedModel,
+    torch.nn.Module,
+    CheetahInitialParticlesMixIn,
+    CheetahFinalParticlesMixIn,
 ):
     """
     Staged model that supports lume model instances that handle Cheetah initial and final
-    particles such that it maintains differentiability
+    particles such that it maintains differentiability.
+
+    PyTorch stages are registered as stage_0, stage_1, etc., preserving their
+    positions in lume_model_instances. Parameters, buffers, device/dtype moves
+    and training mode propagate through these stages, including nested pipelines.
+    Non-PyTorch LUME stages remain supported but are not registered as modules.
     """
 
     def __init__(self, lume_model_instances: list[LUMEModel]):
@@ -84,8 +92,19 @@ class CheetahStagedModel(
         lume_model_instances: list[LUMEModel]
             Ordered list of LUMEModel instances to stage.
         """
+        torch.nn.Module.__init__(self)
         super().__init__(lume_model_instances)
+        for i, model in enumerate(self.lume_model_instances):
+            if isinstance(model, torch.nn.Module):
+                self.add_module(f"stage_{i}", model)
         self._final_distribution = None
+
+    def __setattr__(self, name, value):
+        if name == "cheetah_initial_particles":
+            # ParticleBeam is a Module; assignment must invoke the handoff setter.
+            type(self).cheetah_initial_particles.fset(self, value)
+        else:
+            super().__setattr__(name, value)
 
     @classmethod
     def validate_lume_model_instances(cls, models: list[LUMEModel]):
