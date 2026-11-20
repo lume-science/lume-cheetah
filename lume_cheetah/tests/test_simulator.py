@@ -74,8 +74,9 @@ def test_get_energy_returns_values_by_element_name():
     "energy",
     [1e6, [1e6], [1e6, 2e6], [[1e6, 2e6], [3e6, 4e6]]],
 )
-def test_get_energy_preserves_batches_and_uses_element_entrances(energy):
-    energy = torch.tensor(energy)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_get_energy_preserves_batches_and_uses_element_entrances(energy, dtype):
+    energy = torch.tensor(energy, dtype=dtype)
     segment = Segment(
         [
             Drift(name="D1", length=torch.tensor(0.1)),
@@ -95,11 +96,12 @@ def test_get_energy_preserves_batches_and_uses_element_entrances(energy):
                 frequency=torch.tensor(2.856e9),
             ),
         ]
-    )
+    ).to(dtype=dtype)
     beam = ParticleBeam(
-        particles=torch.zeros(1, 7),
+        particles=torch.zeros(1, 7, dtype=dtype),
         energy=energy,
-        particle_charges=torch.tensor([1.0]),
+        particle_charges=torch.tensor([1.0], dtype=dtype),
+        dtype=dtype,
     )
     simulator = CheetahSimulator(segment=segment, initial_beam_distribution=beam)
     expected = {"D1": energy, "C1": energy, "D2": energy + 1e6, "C2": energy + 1e6}

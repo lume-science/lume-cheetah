@@ -96,13 +96,18 @@ class CheetahSimulator(torch.nn.Module):
     def get_energy(self) -> dict[str, torch.Tensor]:
         """
         Get reference energies in eV at each element entrance for calculating
-        magnetic rigidity. Values preserve beam/lattice batch dimensions.
+        magnetic rigidity. Values preserve beam/lattice batch dimensions and
+        the beam energy's dtype and device.
         Repeated element names retain the last occurrence's entrance energy.
 
         Note: need to track on a copy of the segment to not influence readings!
         """
+        energy = self.beam_distribution.energy
         test_beam = ParticleBeam(
-            torch.zeros(1, 7), energy=self.beam_distribution.energy
+            energy.new_zeros((1, 7)),
+            energy=energy,
+            device=energy.device,
+            dtype=energy.dtype,
         )
         test_segment = deepcopy(self.segment)
         element_names = [e.name for e in test_segment.elements]
