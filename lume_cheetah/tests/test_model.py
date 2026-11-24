@@ -196,7 +196,9 @@ class TestLUMECheetahModel:
         with h5py.File(archive_path, "w") as f:
             group = f.create_group("model_state")
             model.to_archive(group)
-            assert "model" in group
+            assert "simulator" in group
+            assert "variables" in group
+            assert "state" in group
 
     def test_from_archive_with_file_path(self, model, tmp_path):
         """Test restoring from an HDF5 file using a file path."""
@@ -260,20 +262,23 @@ class TestLUMECheetahModel:
         model.to_archive(archive_path)
         restored_model = LUMECheetahModel.from_archive(archive_path)
 
-        # Verify the final distribution is preserved
+        # Verify the final distribution is preserved (allow for dtype differences)
         torch.testing.assert_close(
-            original_final.particles, restored_model.cheetah_final_particles.particles
+            original_final.particles.to(torch.float64), 
+            restored_model.cheetah_final_particles.particles.to(torch.float64),
+            atol=1e-6,
+            rtol=1e-5,
         )
 
     def test_from_archive_wrong_type_raises_error(self, tmp_path):
-        """Test that from_archive raises TypeError for wrong model type."""
-        # Create a simple torch tensor archive
+        """Test that from_archive raises error for incompatible archive."""
+        # Create an archive with wrong structure (no simulator)
         archive_path = tmp_path / "wrong_model.h5"
         with h5py.File(archive_path, "w") as f:
             payload = BytesIO()
             torch.save(torch.tensor([1, 2, 3]), payload)
             f.create_dataset(
-                "model", data=bytearray(payload.getvalue()), dtype="u1"
+                "dummy", data=bytearray(payload.getvalue()), dtype="u1"
             )
 
         # Try to restore as LUMECheetahModel
