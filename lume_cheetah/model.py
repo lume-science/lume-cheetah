@@ -1,3 +1,7 @@
+from contextlib import nullcontext
+from io import BytesIO
+from pathlib import Path
+
 from lume.actions import ActionModel
 from lume.variables import Variable
 from lume_cheetah.staged_model import (
@@ -8,6 +12,7 @@ from lume_cheetah.simulator import CheetahSimulator
 
 from cheetah.particles import ParticleBeam
 
+import h5py
 import torch
 from lume_cheetah.actions import create_builtin_actions
 
@@ -132,3 +137,59 @@ class LUMECheetahModel(
         if self._final_distribution is None:
             raise RuntimeError("final distribution is none")
         return self._final_distribution.clone()
+
+    def to_archive(self, location: str | Path | h5py.Group) -> None:
+        """
+        Archive the current state of the model to an HDF5 file or group.
+
+        The archive stores the complete model state including the simulator,
+        internal state, and final distribution for reconstruction via from_archive.
+
+        Parameters
+        ----------
+        location : str | Path | h5py.Group
+            Path to an HDF5 file (created or overwritten) or an open HDF5 group
+            to which the model state should be archived.
+        """
+        payload = BytesIO()
+        torch.save(self, payload)
+        with (
+            h5py.File(location, "w")
+            if isinstance(location, (str, Path))
+            else nullcontext(location)
+        ) as archive:
+            archive.create_dataset(
+                "model", data=bytearray(payload.getvalue()), dtype="u1"
+            )
+
+    @classmethod
+    def from_archive(
+        cls, location: str | Path | h5py.Group
+    ) -> "LUMECheetahModel":
+        """
+        Restore a model instance from an archived HDF5 file or group.
+
+        Only load trusted archives: restoring the full model uses pickle and
+        can execute arbitrary code. The model is restored to CPU; use
+        ``model.to(...)`` to move it to another device or dtype.
+
+        Parameters
+        ----------
+        location : str | Path | h5py.Group
+            Path to an HDF5 file or an open HDF5 group containing the archived model.
+
+        Returns
+        -------
+        LUMECheetahModel
+            The restored model instance.
+        """
+        with (
+            h5py.File(location, "r")
+            if isinstance(location, (str, Path))
+            else nullcontext(location)
+        ) as archive:
+            payload = BytesIO(archive["model"][()].tobytes())
+        model = torch.load(payload, map_location="cpu", weights_only=False)
+        if not isinstance(model, cls):
+            raise TypeError(f"The archive must contain a {cls.__name__} instance.")
+        return model

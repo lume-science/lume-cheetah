@@ -1,10 +1,12 @@
 from beamphysics import ParticleGroup
 from unittest.mock import patch
+from io import BytesIO
 
 from cheetah.accelerator import Segment, Quadrupole, Drift, Screen
 from cheetah.particles import ParticleBeam
 import pytest
 import torch
+import h5py
 from lume.exceptions import ReadOnlyError
 from lume_cheetah.actions import (
     CheetahWritableScalarVariable,
@@ -180,3 +182,121 @@ class TestLUMECheetahModel:
         torch.testing.assert_close(
             model.cheetah_final_particles.particles, expected.particles
         )
+
+    def test_to_archive_with_file_path(self, model, tmp_path):
+        """Test archiving to an HDF5 file using a file path."""
+        archive_path = tmp_path / "model_archive.h5"
+        model.to_archive(archive_path)
+        assert archive_path.exists()
+        assert archive_path.stat().st_size > 0
+
+    def test_to_archive_with_hdf5_group(self, model, tmp_path):
+        """Test archiving to an HDF5 group."""
+        archive_path = tmp_path / "model_archive.h5"
+        with h5py.File(archive_path, "w") as f:
+            group = f.create_group("model_state")
+            model.to_archive(group)
+            assert "model" in group
+
+    def test_from_archive_with_file_path(self, model, tmp_path):
+        """Test restoring from an HDF5 file using a file path."""
+        # Archive the model
+        archive_path = tmp_path / "model_archive.h5"
+        model.to_archive(archive_path)
+
+        # Restore the model
+        restored_model = LUMECheetahModel.from_archive(archive_path)
+
+        # Verify restoration
+        assert isinstance(restored_model, LUMECheetahModel)
+        torch.testing.assert_close(
+            model.get_value("Q1_k"), restored_model.get_value("Q1_k")
+        )
+        torch.testing.assert_close(
+            model.get_value("Q1_k_readback"),
+            restored_model.get_value("Q1_k_readback"),
+        )
+
+    def test_from_archive_with_hdf5_group(self, model, tmp_path):
+        """Test restoring from an HDF5 group."""
+        # Archive the model to a group
+        archive_path = tmp_path / "model_archive.h5"
+        with h5py.File(archive_path, "w") as f:
+            group = f.create_group("model_state")
+            model.to_archive(group)
+
+        # Restore from the group
+        with h5py.File(archive_path, "r") as f:
+            restored_model = LUMECheetahModel.from_archive(f["model_state"])
+
+        # Verify restoration
+        assert isinstance(restored_model, LUMECheetahModel)
+        torch.testing.assert_close(
+            model.get_value("Q1_k"), restored_model.get_value("Q1_k")
+        )
+
+    def test_archive_preserves_state(self, model, tmp_path):
+        """Test that archiving and restoring preserves model state."""
+        # Modify the model state
+        model.set({"Q1_k": torch.tensor(2.5)})
+        expected_k = model.get_value("Q1_k")
+
+        # Archive and restore
+        archive_path = tmp_path / "model_archive.h5"
+        model.to_archive(archive_path)
+        restored_model = LUMECheetahModel.from_archive(archive_path)
+
+        # Verify the state is preserved
+        torch.testing.assert_close(restored_model.get_value("Q1_k"), expected_k)
+
+    def test_archive_preserves_final_distribution(self, model, tmp_path):
+        """Test that archiving preserves the final particle distribution."""
+        # Set up the model and get the final distribution
+        model.set({"Q1_k": torch.tensor(2.0)})
+        original_final = model.cheetah_final_particles
+
+        # Archive and restore
+        archive_path = tmp_path / "model_archive.h5"
+        model.to_archive(archive_path)
+        restored_model = LUMECheetahModel.from_archive(archive_path)
+
+        # Verify the final distribution is preserved
+        torch.testing.assert_close(
+            original_final.particles, restored_model.cheetah_final_particles.particles
+        )
+
+    def test_from_archive_wrong_type_raises_error(self, tmp_path):
+        """Test that from_archive raises TypeError for wrong model type."""
+        # Create a simple torch tensor archive
+        archive_path = tmp_path / "wrong_model.h5"
+        with h5py.File(archive_path, "w") as f:
+            payload = BytesIO()
+            torch.save(torch.tensor([1, 2, 3]), payload)
+            f.create_dataset(
+                "model", data=bytearray(payload.getvalue()), dtype="u1"
+            )
+
+        # Try to restore as LUMECheetahModel
+        with pytest.raises(TypeError, match="must contain a LUMECheetahModel"):
+            LUMECheetahModel.from_archive(archive_path)
+
+    def test_archive_roundtrip_with_multiple_operations(self, model, tmp_path):
+        """Test archive roundtrip after multiple model operations."""
+        # Perform multiple operations
+        model.set({"Q1_k": torch.tensor(1.5)})
+        model.reset()
+        model.set({"Q1_k": torch.tensor(3.0)})
+
+        expected_state = {
+            "Q1_k": model.get_value("Q1_k"),
+            "Q1_k_readback": model.get_value("Q1_k_readback"),
+        }
+
+        # Archive and restore
+        archive_path = tmp_path / "model_archive.h5"
+        model.to_archive(archive_path)
+        restored_model = LUMECheetahModel.from_archive(archive_path)
+
+        # Verify all state is preserved
+        for name, expected_value in expected_state.items():
+            torch.testing.assert_close(restored_model.get_value(name), expected_value)
