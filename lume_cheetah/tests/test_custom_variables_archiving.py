@@ -26,7 +26,7 @@ from lume_cheetah.simulator import CheetahSimulator
 class CustomQuadrupolePV(TorchScalarVariable, WritableActionMixin):
     """
     Custom quadrupole PV variable (mimics ThinQuadrupolePV from calibration).
-    
+
     This variable can't be pickled when used in archived models, but can be
     reconstructed via its class path and config.
     """
@@ -51,7 +51,7 @@ class CustomQuadrupolePV(TorchScalarVariable, WritableActionMixin):
 class CustomSolenoidPV(TorchScalarVariable, WritableActionMixin):
     """
     Custom solenoid PV variable (mimics SplitSolenoidPV from calibration).
-    
+
     Demonstrates multiple attributes that need to be preserved during archiving.
     """
 
@@ -80,9 +80,7 @@ class TestCustomVariablesArchiving:
         """Create a model with custom variables."""
         segment = Segment(
             [
-                Quadrupole(
-                    name="q01", length=torch.tensor(0.5), k1=torch.tensor(1.0)
-                ),
+                Quadrupole(name="q01", length=torch.tensor(0.5), k1=torch.tensor(1.0)),
                 Solenoid(name="sol1", length=torch.tensor(0.5), k=torch.tensor(1.0)),
                 Drift(name="d1", length=torch.tensor(1.0)),
             ]
@@ -95,7 +93,9 @@ class TestCustomVariablesArchiving:
             energy=torch.tensor(1e6),
         )
 
-        simulator = CheetahSimulator(segment=segment, initial_beam_distribution=particle_beam)
+        simulator = CheetahSimulator(
+            segment=segment, initial_beam_distribution=particle_beam
+        )
 
         variables = [
             CustomQuadrupolePV(
@@ -119,7 +119,7 @@ class TestCustomVariablesArchiving:
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = Path(tmpdir) / "custom_vars.h5"
             model_with_custom_vars.to_archive(archive_path)
-            
+
             # Verify archive structure
             with h5py.File(archive_path, "r") as f:
                 assert "simulator" in f
@@ -136,9 +136,12 @@ class TestCustomVariablesArchiving:
             with h5py.File(archive_path, "r") as f:
                 # Check CustomQuadrupolePV config
                 q_group = f["variables"]["Q01:BCTRL"]
-                assert q_group.attrs["class_module"] == "lume_cheetah.tests.test_custom_variables_archiving"
+                assert (
+                    q_group.attrs["class_module"]
+                    == "lume_cheetah.tests.test_custom_variables_archiving"
+                )
                 assert q_group.attrs["class_name"] == "CustomQuadrupolePV"
-                
+
                 # Verify config dataset exists and can be loaded
                 assert "config" in q_group
                 config_buffer = BytesIO(bytes(q_group["config"][()]))
@@ -150,9 +153,12 @@ class TestCustomVariablesArchiving:
 
                 # Check CustomSolenoidPV config
                 sol_group = f["variables"]["SOL1:BCTRL"]
-                assert sol_group.attrs["class_module"] == "lume_cheetah.tests.test_custom_variables_archiving"
+                assert (
+                    sol_group.attrs["class_module"]
+                    == "lume_cheetah.tests.test_custom_variables_archiving"
+                )
                 assert sol_group.attrs["class_name"] == "CustomSolenoidPV"
-                
+
                 # Verify config dataset exists and can be loaded
                 assert "config" in sol_group
                 config_buffer = BytesIO(bytes(sol_group["config"][()]))
@@ -259,8 +265,12 @@ class TestCustomVariablesArchiving:
 
             # Verify restoration
             assert isinstance(restored, LUMECheetahModel)
-            assert isinstance(restored.supported_variables["Q01:BCTRL"], CustomQuadrupolePV)
-            assert isinstance(restored.supported_variables["SOL1:BCTRL"], CustomSolenoidPV)
+            assert isinstance(
+                restored.supported_variables["Q01:BCTRL"], CustomQuadrupolePV
+            )
+            assert isinstance(
+                restored.supported_variables["SOL1:BCTRL"], CustomSolenoidPV
+            )
 
     def test_missing_custom_variable_class_raises_import_error(self):
         """Test that restoring from archive with missing Variable class raises ImportError."""
@@ -276,7 +286,9 @@ class TestCustomVariablesArchiving:
                     num_particles=100,
                     energy=torch.tensor(1e6),
                 )
-                simulator = CheetahSimulator(segment=segment, initial_beam_distribution=particle_beam)
+                simulator = CheetahSimulator(
+                    segment=segment, initial_beam_distribution=particle_beam
+                )
                 torch.save(simulator, simulator_buffer)
                 f.create_dataset(
                     "simulator",
@@ -289,7 +301,7 @@ class TestCustomVariablesArchiving:
                 var_group = variables_group.create_group("bad_var")
                 var_group.attrs["class_module"] = "nonexistent.module"
                 var_group.attrs["class_name"] = "NonexistentVariable"
-                
+
                 # Create minimal config dataset
                 config_buffer = BytesIO()
                 torch.save({"name": "bad_var", "read_only": False}, config_buffer)

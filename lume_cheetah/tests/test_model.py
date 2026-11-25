@@ -264,7 +264,7 @@ class TestLUMECheetahModel:
 
         # Verify the final distribution is preserved (allow for dtype differences)
         torch.testing.assert_close(
-            original_final.particles.to(torch.float64), 
+            original_final.particles.to(torch.float64),
             restored_model.cheetah_final_particles.particles.to(torch.float64),
             atol=1e-6,
             rtol=1e-5,
@@ -277,9 +277,7 @@ class TestLUMECheetahModel:
         with h5py.File(archive_path, "w") as f:
             payload = BytesIO()
             torch.save(torch.tensor([1, 2, 3]), payload)
-            f.create_dataset(
-                "dummy", data=bytearray(payload.getvalue()), dtype="u1"
-            )
+            f.create_dataset("dummy", data=bytearray(payload.getvalue()), dtype="u1")
 
         # Try to restore as LUMECheetahModel
         with pytest.raises(TypeError, match="must contain a LUMECheetahModel"):
