@@ -304,7 +304,7 @@ class TestLUMECheetahModel:
         self, model, tmp_path
     ):
         """Test that reference energy is preserved for beams with momentum spread.
-        
+
         This is critical for beams with nonzero mean relative momentum deviation,
         where using the mean energy instead of the reference energy would
         renormalize momentum coordinates and change the beam.
@@ -316,9 +316,9 @@ class TestLUMECheetahModel:
         # Add momentum spread to the final distribution
         final_beam_spread = original_final.clone()
         # Add 2% energy spread by modifying the p coordinate (column 5)
-        final_beam_spread.particles[:, 5] = (
-            final_beam_spread.particles[:, 5] + 0.02 * torch.randn(original_final.num_particles)
-        )
+        final_beam_spread.particles[:, 5] = final_beam_spread.particles[
+            :, 5
+        ] + 0.02 * torch.randn(original_final.num_particles)
         model._final_distribution = final_beam_spread
 
         original_energy = model._final_distribution.energy

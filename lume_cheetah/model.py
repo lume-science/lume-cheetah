@@ -217,7 +217,7 @@ class LUMECheetahModel(
                     particles_group = archive.create_group("particles")
                     particle_group = self._final_distribution.to_openpmd_particlegroup()
                     particle_group.write(particles_group, name="final_beam")
-                    
+
                     # Store the original reference energy alongside the OpenPMD data
                     # This preserves the correct reference frame when reconstructing
                     # a beam with nonzero mean relative momentum deviation
