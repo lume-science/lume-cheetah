@@ -293,7 +293,9 @@ class LUMECheetahModel(
 
                     # Load config from archive
                     config_buffer = BytesIO(var_group["config"][()].tobytes())
-                    config = torch.load(config_buffer, map_location="cpu", weights_only=False)
+                    config = torch.load(
+                        config_buffer, map_location="cpu", weights_only=False
+                    )
 
                     try:
                         # Import the Variable class
@@ -315,7 +317,9 @@ class LUMECheetahModel(
             # 4. Restore internal state if available
             if "state" in archive:
                 state_buffer = BytesIO(archive["state"][()].tobytes())
-                model._state = torch.load(state_buffer, map_location="cpu", weights_only=False)
+                model._state = torch.load(
+                    state_buffer, map_location="cpu", weights_only=False
+                )
 
             # 6. Restore final distribution if available
             # Loads OpenPMD-compliant particle distribution and converts to Cheetah format
