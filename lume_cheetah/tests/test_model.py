@@ -88,13 +88,10 @@ class TestLUMECheetahModel:
             assert not torch.equal(model.get_value("beam:S1:mu_x"), initial_mu_x)
 
         properties = ("mu_x", "mu_y", "sigma_x", "sigma_y", "sigma_tau")
-        names = ["beam:S1", *(f"beam:S1:{prop}" for prop in properties)]
+        names = [f"beam:S1:{prop}" for prop in properties]
         assert set(model.supported_variables) == {"Q1_k", "Q1_k_readback", *names}
         values = model.get(names)
         read_beam = model.simulator.segment.S1.get_read_beam()
-        assert isinstance(values["beam:S1"], ParticleGroup)
-        assert values["beam:S1"].n_particle == 1000
-        assert values["beam:S1"] == read_beam.to_openpmd_particlegroup()
         for prop in properties:
             torch.testing.assert_close(
                 values[f"beam:S1:{prop}"], getattr(read_beam, prop)
@@ -103,7 +100,6 @@ class TestLUMECheetahModel:
     @pytest.mark.parametrize(
         "name",
         [
-            "beam:S1",
             "beam:S1:mu_x",
             "beam:S1:mu_y",
             "beam:S1:sigma_x",

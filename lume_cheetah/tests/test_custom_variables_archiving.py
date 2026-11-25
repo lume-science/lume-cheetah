@@ -149,7 +149,7 @@ class TestCustomVariablesArchiving:
                 assert q_config["name"] == "Q01:BCTRL"
                 assert q_config["element_name"] == "q01"
                 assert q_config["pv_offset"] == pytest.approx(0.5)
-                assert q_config["read_only"] == False
+                assert not q_config["read_only"]
 
                 # Check CustomSolenoidPV config
                 sol_group = f["variables"]["SOL1:BCTRL"]
@@ -194,7 +194,7 @@ class TestCustomVariablesArchiving:
             assert isinstance(q_var, CustomQuadrupolePV)
             assert q_var.element_name == "q01"
             assert q_var.pv_offset == pytest.approx(0.5)
-            assert q_var.read_only == False
+            assert not q_var.read_only
 
             # Check SOL variable
             sol_var = restored.supported_variables["SOL1:BCTRL"]
