@@ -299,3 +299,44 @@ class TestLUMECheetahModel:
         # Verify all state is preserved
         for name, expected_value in expected_state.items():
             torch.testing.assert_close(restored_model.get_value(name), expected_value)
+
+    def test_archive_preserves_reference_energy_with_momentum_spread(
+        self, model, tmp_path
+    ):
+        """Test that reference energy is preserved for beams with momentum spread.
+        
+        This is critical for beams with nonzero mean relative momentum deviation,
+        where using the mean energy instead of the reference energy would
+        renormalize momentum coordinates and change the beam.
+        """
+        # Set up the model and run it
+        model.set({"Q1_k": torch.tensor(2.0)})
+        original_final = model.cheetah_final_particles
+
+        # Add momentum spread to the final distribution
+        final_beam_spread = original_final.clone()
+        # Add 2% energy spread by modifying the p coordinate (column 5)
+        final_beam_spread.particles[:, 5] = (
+            final_beam_spread.particles[:, 5] + 0.02 * torch.randn(original_final.num_particles)
+        )
+        model._final_distribution = final_beam_spread
+
+        original_energy = model._final_distribution.energy
+        original_particles = model._final_distribution.particles.clone()
+
+        # Archive and restore
+        archive_path = tmp_path / "model_archive.h5"
+        model.to_archive(archive_path)
+        restored_model = LUMECheetahModel.from_archive(archive_path)
+
+        # Verify the reference energy is preserved
+        restored_energy = restored_model._final_distribution.energy
+        torch.testing.assert_close(restored_energy, original_energy)
+
+        # Verify the particles are preserved (not renormalized by mean energy)
+        torch.testing.assert_close(
+            original_particles.to(torch.float64),
+            restored_model._final_distribution.particles.to(torch.float64),
+            atol=1e-5,
+            rtol=1e-5,
+        )
