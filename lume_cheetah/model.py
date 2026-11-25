@@ -1,3 +1,8 @@
+from contextlib import nullcontext
+from io import BytesIO
+from pathlib import Path
+import importlib
+
 from lume.actions import ActionModel
 from lume.variables import Variable
 from lume_cheetah.staged_model import (
@@ -7,7 +12,9 @@ from lume_cheetah.staged_model import (
 from lume_cheetah.simulator import CheetahSimulator
 
 from cheetah.particles import ParticleBeam
+from beamphysics import ParticleGroup
 
+import h5py
 import torch
 from lume_cheetah.actions import create_builtin_actions
 
@@ -45,7 +52,8 @@ class LUMECheetahModel(
         """
         torch.nn.Module.__init__(self)
 
-        # create builtin actions
+        # Store externally provided action_variables for archiving
+        self.action_variables = action_variables
         action_variables = [*action_variables, *create_builtin_actions(simulator)]
 
         super().__init__(simulator, action_variables)
@@ -132,3 +140,220 @@ class LUMECheetahModel(
         if self._final_distribution is None:
             raise RuntimeError("final distribution is none")
         return self._final_distribution.clone()
+
+    def to_archive(self, location: str | Path | h5py.Group) -> None:
+        """
+        Archive the current state of the model to an HDF5 file or group.
+
+        Stores simulator (which includes initial distribution), action variable configs,
+        internal state, and final distribution. Uses Pydantic's model_dump() for Variable
+        serialization, which is fully reversible with model_validate().
+
+        Parameters
+        ----------
+        location : str | Path | h5py.Group
+            Path to an HDF5 file (created or overwritten) or an open HDF5 group
+            to which the model state should be archived.
+        """
+        with (
+            h5py.File(location, "w")
+            if isinstance(location, (str, Path))
+            else nullcontext(location)
+        ) as archive:
+            # Store archive metadata
+            archive.attrs["model_class"] = (
+                f"{self.__class__.__module__}.{self.__class__.__qualname__}"
+            )
+
+            # 1. Archive simulator (with full state)
+            simulator_buffer = BytesIO()
+            torch.save(self.simulator, simulator_buffer)
+            archive.create_dataset(
+                "simulator",
+                data=bytearray(simulator_buffer.getvalue()),
+                dtype="u1",
+            )
+
+            # 2. Store action variables using Pydantic's model_dump() and model_validate()
+            # This is completely generic: works for any Pydantic Variable subclass
+            if hasattr(self, "action_variables") and self.action_variables:
+                variables_group = archive.create_group("variables")
+                for var in self.action_variables:
+                    var_group = variables_group.create_group(var.name)
+
+                    # Store the Variable's class so it can be reimported
+                    var_class = var.__class__
+                    var_group.attrs["class_module"] = var_class.__module__
+                    var_group.attrs["class_name"] = var_class.__name__
+
+                    # Export Variable config using Pydantic's model_dump()
+                    config = var.model_dump(exclude_none=False)
+
+                    # Serialize config using torch.save (handles complex types)
+                    config_buffer = BytesIO()
+                    torch.save(config, config_buffer)
+                    var_group.create_dataset(
+                        "config",
+                        data=bytearray(config_buffer.getvalue()),
+                        dtype="u1",
+                    )
+
+            # 3. Archive internal state if available
+            if hasattr(self, "_state") and self._state is not None:
+                state_buffer = BytesIO()
+                torch.save(self._state, state_buffer)
+                archive.create_dataset(
+                    "state",
+                    data=bytearray(state_buffer.getvalue()),
+                    dtype="u1",
+                )
+
+            # 4. Archive final distribution as OpenPMD data
+            if (
+                hasattr(self, "_final_distribution")
+                and self._final_distribution is not None
+            ):
+                try:
+                    particles_group = archive.create_group("particles")
+                    particle_group = self._final_distribution.to_openpmd_particlegroup()
+                    particle_group.write(particles_group, name="final_beam")
+
+                    # Store the original reference energy alongside the OpenPMD data
+                    # This preserves the correct reference frame when reconstructing
+                    # a beam with nonzero mean relative momentum deviation
+                    particles_group.attrs["reference_energy"] = float(
+                        self._final_distribution.energy
+                    )
+                except Exception:
+                    # Non-fatal: beam data can be regenerated by running the model
+                    pass
+
+    @classmethod
+    def from_archive(
+        cls, location: str | Path | h5py.Group, model_registry: dict | None = None
+    ) -> "LUMECheetahModel":
+        """
+        Restore a model instance from an archived HDF5 file or group.
+
+        Reconstructs Variable instances from stored configs using Pydantic's
+        model_validate(), which automatically calls model_post_init() to set up
+        backend-dependent Variables.
+
+        Parameters
+        ----------
+        location : str | Path | h5py.Group
+            Path to an HDF5 file or an open HDF5 group containing the archived model.
+        model_registry : dict, optional
+            Registry of model classes for loading nested models (unused, kept for compatibility).
+
+        Returns
+        -------
+        LUMECheetahModel
+            The restored model instance.
+
+        Raises
+        ------
+        ImportError
+            If a Variable class cannot be imported.
+        TypeError
+            If the archive is missing required components.
+        """
+        with (
+            h5py.File(location, "r")
+            if isinstance(location, (str, Path))
+            else nullcontext(location)
+        ) as archive:
+            # Check for old archive format (single "model" key with full pickle)
+            if "model" in archive and "simulator" not in archive:
+                payload = BytesIO(archive["model"][()].tobytes())
+                model = torch.load(payload, map_location="cpu", weights_only=False)
+                if not isinstance(model, cls):
+                    raise TypeError(
+                        f"The archive must contain a {cls.__name__} instance."
+                    )
+                return model
+
+            # New format: separate simulator, variables, and state
+            if "simulator" not in archive:
+                raise TypeError(
+                    f"The archive must contain a {cls.__name__} instance. "
+                    "Expected 'simulator' key."
+                )
+
+            # 1. Restore simulator
+            simulator_buffer = BytesIO(archive["simulator"][()].tobytes())
+            simulator = torch.load(
+                simulator_buffer, map_location="cpu", weights_only=False
+            )
+
+            # 2. Reconstruct action variables from stored configs using Pydantic
+            action_variables = []
+            variables_group = archive.get("variables")
+
+            if variables_group is not None:
+                for var_name in sorted(variables_group.keys()):
+                    var_group = variables_group[var_name]
+
+                    # Restore the variable from stored class reference and config
+                    class_module = var_group.attrs["class_module"]
+                    class_name = var_group.attrs["class_name"]
+
+                    # Load config from archive
+                    config_buffer = BytesIO(var_group["config"][()].tobytes())
+                    config = torch.load(
+                        config_buffer, map_location="cpu", weights_only=False
+                    )
+
+                    try:
+                        # Import the Variable class
+                        module = importlib.import_module(class_module)
+                        VariableClass = getattr(module, class_name)
+
+                        # Use Pydantic's model_validate() for all Variables
+                        var = VariableClass.model_validate(config)
+
+                        action_variables.append(var)
+                    except Exception as e:
+                        raise ImportError(
+                            f"Cannot restore Variable '{var_name}' ({class_module}.{class_name}): {e}"
+                        ) from e
+
+            # 3. Create model with reconstructed variables and simulator
+            model = cls(simulator, action_variables)
+
+            # 4. Restore internal state if available
+            if "state" in archive:
+                state_buffer = BytesIO(archive["state"][()].tobytes())
+                model._state = torch.load(
+                    state_buffer, map_location="cpu", weights_only=False
+                )
+
+            # 6. Restore final distribution if available
+            # Loads OpenPMD-compliant particle distribution and converts to Cheetah format
+            # The final_beam is written to particles/final_beam by the OpenPMD writer
+            # NOTE: Initial distribution restoration is handled by reconstructing the simulator
+            if "particles" in archive and "final_beam" in archive["particles"]:
+                try:
+                    # Load ParticleGroup from OpenPMD format
+                    particle_group = ParticleGroup(
+                        h5=archive["particles"]["final_beam"]
+                    )
+
+                    # Use the stored reference energy to preserve the correct reference frame
+                    # for beams with nonzero mean relative momentum deviation
+                    target_dtype = model.simulator.beam_distribution.particles.dtype
+                    energy = torch.tensor(
+                        archive["particles"].attrs["reference_energy"],
+                        dtype=target_dtype,
+                    )
+                    model._final_distribution = ParticleBeam.from_openpmd_particlegroup(
+                        particle_group,
+                        energy=energy,
+                        dtype=target_dtype,
+                        device=model.simulator.beam_distribution.particles.device,
+                    )
+                except Exception:
+                    # Non-fatal: beam data can be regenerated by running the model
+                    pass
+
+            return model
